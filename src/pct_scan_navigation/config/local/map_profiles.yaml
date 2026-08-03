@@ -1,0 +1,15 @@
+maps:
+  outdoor:
+    pcd_path: "/home/kangneng/xq/map/pcd/outdoor/outdoor_global_voxel02.pcd"
+    tomo_path: "/home/kangneng/xq/code/work_space/kn_nav_ws/src/PCT_planner/rsc/tomogram/outdoor_global_voxel002_ground.pickle"
+    localization:
+      fitness_eval_threshold: 0.2
+      threshold_fitness: 0.9
+      threshold_fitness_init: 0.9
+  cross-floor-kn:
+    pcd_path: "/home/kangneng/nav_map/cross-floor-kn/global_map_downsize.pcd"
+    tomo_path: "/home/kangneng/nav_map/cross-floor-kn/liuxing_ground_voxel005_radius015.pickle"
+    localization:
+      fitness_eval_threshold: 0.2
+      threshold_fitness: 0.7
+      threshold_fitness_init: 0.9

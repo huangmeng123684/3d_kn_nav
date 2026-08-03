@@ -1,0 +1,70 @@
+# =============================================================================
+# PCT Global Planner — parameter configuration
+#
+# This file is loaded by the launch file.
+# Edit parameters here instead of passing --ros-args on the command line.
+# =============================================================================
+
+pct_global_planner:
+  ros__parameters:
+
+    # ── Planning map ───────────────────────────────────────────────────────
+    # Absolute path to the pre-built tomogram pickle
+    tomo_path: "/home/code/work_space/kn_nav/src/PCT_planner/rsc/tomogram/liuxing_ground_voxel005_radius015.pickle"
+
+    # ── TF frames ──────────────────────────────────────────────────────────
+    # Planning frame (must match /pct_path frame_id and tomogram coordinates)
+    global_frame: "map"
+
+    # Robot base frame for TF lookup of start pose
+    robot_frame: "base_link"
+
+    # ── Input topics ───────────────────────────────────────────────────────
+    # RViz "2D Goal Pose" tool
+    goal_pose_topic: "/goal_pose"
+
+    # RViz "Publish Point" tool (recommended for multi-floor)
+    clicked_point_topic: "/clicked_point"
+
+    # ── Output topics ──────────────────────────────────────────────────────
+    # Smoothed PCT trajectory
+    path_topic: "/pct_path"
+
+    # Raw A* path for debugging
+    astar_path_topic: "/pct_astar_path"
+
+    # ── Odometry fallback ──────────────────────────────────────────────────
+    # Topic for odometry (only used if use_odom_fallback=true)
+    odom_topic: "/Odometry_open3d"
+
+    # Fall back to odom pose if TF lookup fails
+    use_odom_fallback: false
+
+    # ── Timing ─────────────────────────────────────────────────────────────
+    # TF lookup timeout [s]
+    tf_timeout_s: 0.2
+
+    # ── Visualization ──────────────────────────────────────────────────────
+    # Publish markers (goal sphere, path lines) on /pct_marker
+    publish_visualization: true
+
+    # Publish tomogram PointCloud2 on /tomogram
+    publish_tomogram: true
+
+    # Interval for republishing tomogram (RViz late-joiner support) [s]
+    tomogram_republish_period_s: 1.0
+
+    # ── Behaviour ──────────────────────────────────────────────────────────
+    # Save trajectory as .npy file after each successful plan
+    save_trajectory: false
+
+    # If goal z is within this threshold of 0, use robot's current floor [m]
+    goal_z_epsilon: 0.05
+
+    # If a goal arrives with z≈0, infer the target floor height from tomogram
+    # cells near the goal XY before falling back to the robot's current floor.
+    infer_goal_z_from_tomogram: true
+    goal_z_search_radius_cells: 2
+
+    # If true: queue latest goal when currently planning; false: discard
+    allow_new_goal_during_planning: true

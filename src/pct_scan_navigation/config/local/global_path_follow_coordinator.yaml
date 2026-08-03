@@ -1,0 +1,26 @@
+pct_global_path_follow_coordinator:
+  ros__parameters:
+    global_frame: map
+    robot_frame: base_link
+    global_path_topic: /pct_path
+    tracking_path_topic: /global_path_follow/path
+    tracking_segment_topic: /global_path_follow/tracking_segment
+    tracking_point_topic: /global_path_follow/tracking_point
+    final_approach_topic: /pct_scan_navigation/final_approach
+    status_topic: /pct_global_path_follow/status
+    update_rate: 10.0
+    tracking_path_republish_rate: 5.0
+    goal_reached_distance: 0.15
+    goal_yaw_tolerance: 0.10
+    goal_reached_z_tolerance: 0.8
+    final_heading_entry_distance: 0.25
+    tf_timeout: 0.1
+    crop_path_to_robot: true
+    tracking_path_length: 6.0
+    tracking_path_min_points: 8
+    tracking_point_lookahead_distance: 0.7
+    use_height_for_progress: true
+    progress_z_weight: 1.0
+    progress_max_z_distance: 1.2
+    progress_backtrack_segments: 20
+    progress_forward_segments: 300

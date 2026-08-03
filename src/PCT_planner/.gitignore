@@ -1,0 +1,13 @@
+*.stl
+*.obj
+*.ply
+*.pcd
+*.npy
+*.pyc
+*.so
+*.so.4
+
+
+__pycache__/
+build/
+install/

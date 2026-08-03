@@ -1,0 +1,14 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Runtime logs
+open3d_loc/log/
+
+# Generated point clouds and data
+FAST_LIO/PCD/
+
+# ROS/colcon build outputs if created inside this repository
+build/
+install/
+log/

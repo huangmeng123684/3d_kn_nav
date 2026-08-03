@@ -1,0 +1,44 @@
+# 通过 GitHub Actions，在 GitHub 仓库每次 push 后自动同步到 Gitee。
+name: sync2gitee
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - humble
+
+jobs:
+  repo-sync:
+    runs-on: ubuntu-latest
+    env:
+      dst_key: ${{ secrets.GITEE_PRIVATE_KEY }}
+      dst_token: ${{ secrets.GITEE_TOKEN }}
+      gitee_user: ${{ secrets.GITEE_USER }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: check sync config
+        run: |
+          test -n "$dst_key" || { echo "GITEE_PRIVATE_KEY is missing"; exit 1; }
+          test -n "$dst_token" || { echo "GITEE_TOKEN is missing"; exit 1; }
+          test -n "$gitee_user" || { echo "GITEE_USER is missing"; exit 1; }
+          echo "Sync target: gitee/${gitee_user}/${GITHUB_REPOSITORY#*/}"
+
+      - name: sync github -> gitee
+        uses: Yikun/hub-mirror-action@master
+        with:
+          # 必选，需要同步的 GitHub 用户（源）
+          src: github/${{ github.repository_owner }}
+          # 必选，需要同步到的 Gitee 用户（目的）
+          dst: gitee/${{ secrets.GITEE_USER }}
+          # 必选，Gitee 公钥对应的私钥，https://gitee.com/profile/sshkeys
+          dst_key: ${{ secrets.GITEE_PRIVATE_KEY }}
+          # 必选，Gitee 对应的用于创建仓库的 token，https://gitee.com/profile/personal_access_tokens
+          dst_token: ${{ secrets.GITEE_TOKEN }}
+          # 如果是组织，指定组织即可，默认为用户 user
+          account_type: user
+          # 直接取当前项目的仓库名
+          static_list: ${{ github.event.repository.name }}
+          debug: true

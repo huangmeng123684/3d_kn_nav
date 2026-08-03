@@ -1,0 +1,41 @@
+global_localization_node:
+  ros__parameters:
+    map_name: "outdoor"
+    path_map: "/home/nav_map/cross-floor-kn/global_map_downsize.pcd"
+    path_imu_to_base: "/home/nav_map/cross-floor-kn/imu_to_base.txt"
+
+    pcd_queue_maxsize: 10
+    loc_frequence: 20.0
+    map_publish_interval: 5.0
+
+    voxelsize_coarse: 0.2
+    voxel_downsample_size: 0.1
+    icp_distance_threshold: 0.15
+    fitness_eval_threshold: 0.15
+    normal_search_radius: 0.4
+    scan_map_filter_radius: 1.0
+    localization_lost_fail_count: 3
+
+    threshold_fitness: 0.5
+    threshold_fitness_init: 0.7
+
+    max_icp_translation: 0.4
+    max_icp_yaw_deg: 2.0
+    max_init_icp_translation: 2.0
+    max_init_icp_yaw_deg: 20.0
+    min_init_fitness_improvement: 0.02
+    min_source_points: 500
+    min_target_points: 500
+
+    dis_updatemap: 3.5
+    initialpose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    static_tf_imu_link_to_base_link: [0.200000, 0.000000, 0.000000, 0.00000, 0.25882, 0.00000, 0.96593]
+    static_tf_motion_link_to_base_link: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+
+localization_service_node:
+  ros__parameters:
+    initialpose_topic: "/initialpose"
+    current_pose_topic: "/Odometry_open3d"
+    goal_topic: "/goal_pose"
+    relocalize_timeout_sec: 20.0

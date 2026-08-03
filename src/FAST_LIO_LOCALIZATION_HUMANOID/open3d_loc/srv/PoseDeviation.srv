@@ -1,0 +1,16 @@
+float64 x
+float64 y
+float64 z
+float64 qx
+float64 qy
+float64 qz
+float64 qw
+---
+bool success
+geometry_msgs/Pose current_pose
+float64 error_x
+float64 error_y
+float64 distance_xy
+float64 yaw_error_rad
+float64 yaw_error_deg
+string message

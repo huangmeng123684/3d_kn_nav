@@ -1,0 +1,68 @@
+# Safe SCAN-Planner test profile for FAST-LIO + Open3D localization.
+#
+# Expected inputs from open3d_loc:
+#   /Odometry_open3d  nav_msgs/Odometry, frame_id=map, child_frame_id=base_link
+#   /scan_map         sensor_msgs/PointCloud2, points already expressed in map
+#
+# This file is used by open3d_rviz.launch.py, which deliberately starts no
+# controller.  RViz goals therefore exercise mapping and local planning only.
+scan_planner_node:
+  ros__parameters:
+    use_sim_time: false
+
+    # RViz "2D Goal Pose" -> /move_base_simple/goal.
+    fsm.navi_mode: 1
+    fsm.thresh_replan: 1.0
+    fsm.thresh_no_replan: 0.1
+    fsm.planning_horizon: 3.5
+    fsm.emergency_time: 1.0
+    fsm.fail_safe: true
+    fsm.max_replan_fail_count: 100
+
+    # Open3D publishes both odometry and the transformed scan in map.
+    grid_map.frame_id: map
+    grid_map.sliding_map_frame_id: scan_sliding_map
+    grid_map.sensor_type: lidar
+    grid_map.cloud_is_world: true
+    grid_map.need_extrinsic: false
+    grid_map.resolution: 0.20
+    grid_map.sliding_map_size_x: 7.0
+    grid_map.sliding_map_size_y: 7.0
+    grid_map.sliding_map_size_z: 5.0
+    grid_map.local_update_range_x: 5.5
+    grid_map.local_update_range_y: 5.5
+    grid_map.local_update_range_z: 3.0
+    grid_map.map_sliding_en: true
+    grid_map.map_sliding_thresh: 0.2
+    grid_map.double_cylinder_radius: 0.28
+    grid_map.double_cylinder_offset: 0.23
+    grid_map.body_height: 0.40
+    grid_map.obstacles_inflation_z_up: 0.10
+    grid_map.obstacles_inflation_z_down: 0.30
+    grid_map.ground_height: 0.0
+
+    grid_map.p_hit: 0.85
+    grid_map.p_miss: 0.30
+    grid_map.p_min: 0.12
+    grid_map.p_max: 0.98
+    grid_map.p_occ: 0.80
+    grid_map.max_ray_length: 5.0
+    grid_map.vis_height: 0.30
+    grid_map.show_occ_time: false
+
+    # Conservative limits for local trajectory generation during RViz tests.
+    manager.max_vel: 0.30
+    manager.max_acc: 0.30
+    manager.max_jerk: 3.0
+    manager.control_points_distance: 0.20
+    manager.feasibility_tolerance: 0.50
+    manager.planning_horizon: 3.5
+
+    optimization.lambda_smooth: 1.0
+    optimization.lambda_collision: 1.0
+    optimization.lambda_feasibility: 0.1
+    optimization.lambda_fitness: 1.0
+    optimization.dist0: 0.25
+    optimization.max_vel: 0.30
+    optimization.max_acc: 0.30
+    optimization.order: 3

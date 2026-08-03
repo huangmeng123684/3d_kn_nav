@@ -1,0 +1,24 @@
+pure_pursuit_node:
+  ros__parameters:
+    k: 0.5
+    Lfc: 0.5
+    Kp: 1.0
+    dt: 0.1
+    goal_threshold: 0.15
+    final_heading_entry_distance: 0.20
+    final_heading_command_deadband: 0.02
+    min_final_angular_velocity: 0.20
+    max_acceleration: 0.08
+    minCurvature: 0.0
+    maxCurvature: 3.0
+    minVelocity: 0.40
+    maxVelocity: 0.40
+    maxAngularVelocity: 0.6
+    rotate_to_path_threshold: 1.047
+    rotate_to_path_tolerance: 0.349
+    goal_yaw_tolerance: 0.175
+    rotate_to_heading_gain: 2.0
+    final_approach_topic: /pct_scan_navigation/final_approach
+    obstacle_th: 0.5
+    odom_topic: /Odometry_open3d
+    odom_timeout: 1.0

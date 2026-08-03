@@ -1,0 +1,8 @@
+pct_scan_coordinator:
+  ros__parameters:
+    mode: 2
+    global_frame: map
+    path_topic: /pct_path
+    waypoints_topic: /scan_planner/waypoints
+    waypoint_spacing: 1.0
+    waypoint_z_offset: 0.0

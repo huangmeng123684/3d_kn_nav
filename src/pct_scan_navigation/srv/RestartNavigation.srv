@@ -1,0 +1,6 @@
+uint8 SOFT_RESET=0
+uint8 FULL_RESTART=1
+uint8 mode
+---
+bool accepted
+string message

@@ -1,0 +1,8 @@
+maps:
+  outdoor:
+    pcd_path: "/home/nav_map/cross-floor-kn/global_map_downsize.pcd"
+    tomo_path: "/home/code/work_space/kn_nav/src/PCT_planner/rsc/tomogram/liuxing_ground_voxel005_radius015.pickle"
+    localization:
+      fitness_eval_threshold: 0.15
+      threshold_fitness: 0.5
+      threshold_fitness_init: 0.7

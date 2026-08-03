@@ -1,0 +1,16 @@
+**
+
+!thirdparty/
+thirdparty/**
+!thirdparty/open3d141.zip
+
+!work_space/
+work_space/**
+!work_space/ws_livox/
+!work_space/ws_livox/src/
+!work_space/ws_livox/src/**
+work_space/ws_livox/src/**/.git
+work_space/ws_livox/src/**/.git/**
+
+!work_space/kn_nav_ws/
+!work_space/kn_nav_ws/docker/

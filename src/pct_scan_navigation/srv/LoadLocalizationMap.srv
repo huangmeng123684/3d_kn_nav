@@ -1,0 +1,9 @@
+string map_name
+string pcd_path
+bool use_localization_thresholds
+float32 fitness_eval_threshold
+float32 threshold_fitness
+float32 threshold_fitness_init
+---
+bool success
+string message
