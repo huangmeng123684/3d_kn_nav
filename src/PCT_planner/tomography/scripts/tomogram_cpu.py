@@ -137,10 +137,12 @@ def read_pcd(path):
         elif data_mode == 'binary':
             xyz = np.empty((points, 3), np.float32)
             for c, field in enumerate(fields):
-                raw = f.read(points * size[c] * count[c])
-                col = np.frombuffer(raw, dtype=field_dtype(c))
+                nbytes = points * size[c] * count[c]
                 if field in ('x', 'y', 'z'):
+                    col = np.frombuffer(f.read(nbytes), dtype=field_dtype(c))
                     xyz[:, ('x', 'y', 'z').index(field)] = col
+                else:
+                    f.seek(nbytes, 1)   # skip non-xyz fields
         elif data_mode == 'binary_compressed':
             xyz = np.empty((points, 3), np.float32)
             for c, field in enumerate(fields):
@@ -159,6 +161,17 @@ def read_pcd(path):
     print(f'[INFO] {path}: {points} points, DATA={data_mode}, '
           f'FIELDS={fields}', file=sys.stderr)
     return xyz
+
+
+def voxel_downsample(points, voxel_size):
+    """Keep one point per cubic voxel (first point seen). <=0 disables."""
+    if voxel_size <= 0:
+        return points
+    q = np.floor(points[:, :3] / voxel_size)
+    _, uniq = np.unique(q, axis=0, return_index=True)
+    print(f'[INFO] voxel downsample {voxel_size} m: '
+          f'{points.shape[0]} -> {uniq.shape[0]} points', file=sys.stderr)
+    return points[uniq]
 
 
 # ── pure-numpy tomography pipeline ───────────────────────────────────────────
@@ -202,6 +215,12 @@ def build_tomogram(points, resolution, ground_h, slice_dh, trav):
                          f'{n_slice_init} slices')
     center = (points_max[:2] + points_min[:2]) / 2
     slice_h0 = points_min[-1] + slice_dh
+
+    extent = points_max - points_min
+    est_gb = n_slice_init * dim_x * dim_y * 4 * 7 / 1e9
+    print(f'[INFO] extent(m)=({extent[0]:.1f}x{extent[1]:.1f}x{extent[2]:.1f}) '
+          f'grid={dim_x}x{dim_y} slices={n_slice_init} '
+          f'est. peak ~{est_gb:.1f} GB', file=sys.stderr)
 
     half_trav_k = int(trav['kernel_size'] / 2)
     step_stand = float(1.2 * resolution * np.tan(trav['slope_max']))
@@ -347,9 +366,17 @@ def main():
                     help='ground plane height [m] (default 0.0)')
     ap.add_argument('--slice_dh', type=float, default=0.5,
                     help='height slice thickness [m] (default 0.5)')
+    ap.add_argument('--voxel', type=float, default=0.0,
+                    help='voxel downsampling size [m] (0 = off; '
+                         'recommend ~resolution for huge clouds)')
     args = ap.parse_args()
 
     points = read_pcd(args.pcd)
+    if args.voxel <= 0 and points.shape[0] > 10_000_000:
+        print(f'[WARN] {points.shape[0]} points is very large; add '
+              f'--voxel {args.resolution:.2f} to downsample, otherwise this '
+              f'may run out of memory', file=sys.stderr)
+    points = voxel_downsample(points, args.voxel)
     data_dict = build_tomogram(
         points, args.resolution, args.ground_h, args.slice_dh, DEFAULT_TRAV)
     with open(args.out, 'wb') as f:
