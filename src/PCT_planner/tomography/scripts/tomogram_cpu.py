@@ -189,10 +189,10 @@ def _box_filter_sum(a, half):
     ii[:, :-1, :-1] = a
     ii = ii.cumsum(axis=1).cumsum(axis=2)
 
-    top = np.clip(np.arange(H) - half, 0, H + 1)
-    bot = np.clip(np.arange(H) + half + 1, 0, H + 1)
-    lft = np.clip(np.arange(W) - half, 0, W + 1)
-    rgt = np.clip(np.arange(W) + half + 1, 0, W + 1)
+    top = np.clip(np.arange(H) - half, 0, H)
+    bot = np.clip(np.arange(H) + half + 1, 0, H)
+    lft = np.clip(np.arange(W) - half, 0, W)
+    rgt = np.clip(np.arange(W) + half + 1, 0, W)
 
     s_top = ii[:, top]          # (n_slice, H, W+1)
     s_bot = ii[:, bot]
