@@ -4,6 +4,7 @@ maps:
 
     # tomo_path: "/home/code/work_space/kn_nav/src/PCT_planner/rsc/tomogram/liuxing_ground_voxel005_radius015.pickle"
     pcd_path: "/workspace/kn_nav_ws/src/PCT_planner/rsc/pcd/dinggu7_6.pcd"
+    
     tomo_path: "/workspace/kn_nav_ws/src/PCT_planner/rsc/tomogram/dinggu7_6.pickle"
     localization:
       fitness_eval_threshold: 0.15
