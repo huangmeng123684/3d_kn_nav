@@ -135,14 +135,20 @@ def read_pcd(path):
                 rows = rows.reshape(1, -1)
             xyz = np.ascontiguousarray(rows[:, xyz_idx], dtype=np.float32)
         elif data_mode == 'binary':
-            xyz = np.empty((points, 3), np.float32)
-            for c, field in enumerate(fields):
-                nbytes = points * size[c] * count[c]
-                if field in ('x', 'y', 'z'):
-                    col = np.frombuffer(f.read(nbytes), dtype=field_dtype(c))
-                    xyz[:, ('x', 'y', 'z').index(field)] = col
-                else:
-                    f.seek(nbytes, 1)   # skip non-xyz fields
+            # binary PCD is interleaved (AOS): [x0,y0,z0,i0,...][x1,y1,z1,i1,...]
+            # Must read as a structured dtype — NOT field-by-field (that's SOA,
+            # which is only correct for binary_compressed after decompression).
+            names_dt, fmts_dt = [], []
+            for i, fn in enumerate(fields):
+                ct = count[i] if i < len(count) else 1
+                base = str(field_dtype(i))
+                fmts_dt.append(base if ct == 1 else (base, ct))
+                names_dt.append(fn)
+            dt = np.dtype({'names': names_dt, 'formats': fmts_dt})
+            rec = np.frombuffer(f.read(dt.itemsize * points), dtype=dt, count=points)
+            xyz = np.column_stack([rec['x'].astype(np.float32),
+                                   rec['y'].astype(np.float32),
+                                   rec['z'].astype(np.float32)])
         elif data_mode == 'binary_compressed':
             xyz = np.empty((points, 3), np.float32)
             for c, field in enumerate(fields):
