@@ -181,8 +181,8 @@ class Go2CmdVelBridge(Node):
         self._publish_armed(False)
         self._publish_safe_command(Go2VelocityCommand())
         self.get_logger().info(
-            "Go2 cmd_vel bridge initialized via WebRTC to '%s'; "
-            'bridge is DISABLED and will not change posture', robot_ip)
+            f"Go2 cmd_vel bridge initialized via WebRTC to '{robot_ip}'; "
+            'bridge is DISABLED and will not change posture')
 
     # ------------------------------------------------------------------
     # ROS callbacks
@@ -195,7 +195,7 @@ class Go2CmdVelBridge(Node):
         command = self._controller.lastOutput()
 
         if reason and was_armed:
-            self.get_logger().error('%s', reason)
+            self.get_logger().error(f'{reason}')
         if was_armed != is_armed:
             self._publish_armed(is_armed)
         self._publish_safe_command(command)
@@ -223,9 +223,9 @@ class Go2CmdVelBridge(Node):
         self._publish_armed(self._controller.armed())
 
         if response.success:
-            self.get_logger().info('%s', response.message)
+            self.get_logger().info(f'{response.message}')
         else:
-            self.get_logger().warn('%s', response.message)
+            self.get_logger().warn(f'{response.message}')
 
     def _control_tick(self):
         was_armed = self._controller.armed()
@@ -239,7 +239,7 @@ class Go2CmdVelBridge(Node):
             self._publish_armed(is_armed)
             if not is_armed:
                 self.get_logger().error(
-                    'Safety fault: %s; bridge is now DISABLED', fault)
+                    f'Safety fault: {fault}; bridge is now DISABLED')
 
     # ------------------------------------------------------------------
     # helpers
@@ -274,11 +274,11 @@ class Go2CmdVelBridge(Node):
         try:
             self._controller.shutdown()
         except Exception as exc:
-            self.get_logger().warn('safety controller shutdown failed: %s', exc)
+            self.get_logger().warn(f'safety controller shutdown failed: {exc}')
         try:
             self._client.cleanup()
         except Exception as exc:
-            self.get_logger().warn('webrtc client cleanup failed: %s', exc)
+            self.get_logger().warn(f'webrtc client cleanup failed: {exc}')
 
 
 def main(args=None):
