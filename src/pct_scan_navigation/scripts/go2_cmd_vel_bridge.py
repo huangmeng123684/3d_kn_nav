@@ -91,7 +91,9 @@ class Go2CmdVelBridge(Node):
         self._throttle_marks = {}
 
         # ── 参数（照抄 go2_bridge.yaml，robot_ip 替代 C++ 的 network_interface）──
-        self.declare_parameter('use_sim_time', False)
+        # use_sim_time 不手动声明：rclpy 的 TimeSource 在节点构造时已自动声明
+        # （attach_node 内 has_parameter 检查后 declare_parameter('use_sim_time', False)），
+        # 再声明一次会抛 ParameterAlreadyDeclaredException。
         self.declare_parameter('robot_ip', '')
         self.declare_parameter('control_rate', 20.0)
         self.declare_parameter('min_vx', 0.0)
@@ -288,7 +290,7 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     except Exception as exc:
-        rclpy.logging.get_logger('go2_cmd_vel_bridge').fatal('%s', exc)
+        rclpy.logging.get_logger('go2_cmd_vel_bridge').fatal(str(exc))
         if rclpy.ok():
             rclpy.shutdown()
         return 1
