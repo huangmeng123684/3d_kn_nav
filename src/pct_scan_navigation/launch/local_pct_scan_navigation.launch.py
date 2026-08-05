@@ -180,10 +180,9 @@ def generate_launch_description():
         }],
     )
     bridge = Node(
-        package='pure_pursuit_planner', executable='go2_cmd_vel_bridge',
+        package='pct_scan_navigation', executable='go2_cmd_vel_bridge.py',
         name='go2_cmd_vel_bridge', output='both',
         parameters=[navigation_config('go2_bridge.yaml'), {
-            'network_interface': network_interface,
             'use_sim_time': use_sim_time,
         }],
         condition=IfCondition(start_go2_bridge),

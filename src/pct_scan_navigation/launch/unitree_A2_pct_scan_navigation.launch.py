@@ -19,12 +19,13 @@ def generate_launch_description():
         DeclareLaunchArgument('start_open3d_loc', default_value='true'),
         DeclareLaunchArgument('start_pct_planner', default_value='true'),
         DeclareLaunchArgument('network_interface', default_value='eth0'),
+        DeclareLaunchArgument('start_go2_bridge', default_value='false'),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(base_launch),
             launch_arguments={
                 'config_profile': 'A2',
                 'navigation_mode': LaunchConfiguration('navigation_mode'),
-                'start_go2_bridge': 'true',
+                'start_go2_bridge': LaunchConfiguration('start_go2_bridge'),
                 'use_sim_time': LaunchConfiguration('use_sim_time'),
                 'start_open3d_loc': LaunchConfiguration('start_open3d_loc'),
                 'start_pct_planner': LaunchConfiguration('start_pct_planner'),

@@ -46,6 +46,9 @@ install(DIRECTORY include/ DESTINATION include)
 install(PROGRAMS
   scripts/global_path_follow_coordinator_node.py
   scripts/nav_manager_node.py
+  scripts/go2_cmd_vel_bridge.py
+  scripts/go2_safety_controller.py
+  scripts/webrtc_sport_client.py
   DESTINATION lib/${PROJECT_NAME}
 )
 install(PROGRAMS scripts/global_path_follow_coordinator_node.py
