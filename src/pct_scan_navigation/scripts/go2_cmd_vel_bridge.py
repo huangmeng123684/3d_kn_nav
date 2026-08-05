@@ -230,6 +230,9 @@ class Go2CmdVelBridge(Node):
             self.get_logger().info(f'{response.message}')
         else:
             self.get_logger().warn(f'{response.message}')
+        # rclpy Humble: 回调返回值即响应体，不 return 会发 None → send_response
+        # 抛 TypeError()（str 为空，之前的空 FATAL 就是这个）。
+        return response
 
     def _control_tick(self):
         was_armed = self._controller.armed()
