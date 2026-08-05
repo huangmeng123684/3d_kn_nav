@@ -3,8 +3,8 @@
 """Python 移植版 Go2 安全控制器（1:1 复刻 C++ go2_safety_controller.cpp/hpp）。
 
 对外契约与 C++ 版一致。sport_client 只需提供两个方法：
-    move(vx, vy, vyaw) -> int   # 0 成功，非 0 失败
-    stopMove() -> int           # 0 成功，非 0 失败
+    Move(vx, vy, vyaw) -> int   # 0 成功，非 0 失败
+    StopMove() -> int           # 0 成功，非 0 失败
 （WebRTCSportClient 已满足，见同目录 webrtc_sport_client.py）
 
 线程安全：所有公共方法内部持锁，对应 C++ 的 controller_mutex_。
@@ -224,7 +224,7 @@ class Go2SafetyController:
                 self._last_output.vyaw, self._target_command.vyaw, yaw_delta
             )
 
-            result = self._sport_client.move(nxt.vx, nxt.vy, nxt.vyaw)
+            result = self._sport_client.Move(nxt.vx, nxt.vy, nxt.vyaw)
             if result != 0:
                 self._fault_and_disarm(f'SportClient::Move failed with code {result}')
                 return
@@ -293,7 +293,7 @@ class Go2SafetyController:
         self._last_fault = reason
 
     def _send_stop(self):
-        move_result = self._sport_client.move(0.0, 0.0, 0.0)
-        stop_result = self._sport_client.stopMove()
+        move_result = self._sport_client.Move(0.0, 0.0, 0.0)
+        stop_result = self._sport_client.StopMove()
         self._last_output = Go2VelocityCommand()
         return move_result == 0 and stop_result == 0
