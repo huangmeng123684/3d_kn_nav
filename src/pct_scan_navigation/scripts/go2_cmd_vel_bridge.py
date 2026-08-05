@@ -14,13 +14,15 @@ unitree_webrtc_connect（LocalSTA 直连狗）：
   20Hz 定时器                               control tick
 
 webrtc_sport_client.py 保持与 pure_pursuit_planner 原文件逐字节一致，不改动；
-假 rospy 注入、sportmodestate 心跳订阅、0.5s 运动 RPC 超时都落在这里。
+假 rospy 注入、sportmodestate 心跳订阅、3.0s 运动 RPC 超时（4G 往返余量）都落在这里。
+断连 0.5s 故障响应由安全控制器的 sport_state_timeout 承担，见 go2_bridge.yaml。
 """
 
 import math
 import os
 import sys
 import time
+import traceback
 
 # ── rospy 兼容（test_new.py 同款手法，见 scripts/test_new.py）──
 # webrtc_sport_client.py 里 `import rospy` 是硬依赖；kn_nav 容器是纯 ROS2 无
@@ -67,17 +69,19 @@ from webrtc_sport_client import WebRTCSportClient  # noqa: E402
 
 
 class FastWebRTCSportClient(WebRTCSportClient):
-    """收紧运动 RPC 超时到 0.5s。
+    """重写 _call：运动 RPC 命令超时设为 3.0s。
 
     webrtc_sport_client.py 保持原样不改（其 _call 用 bridge.run 默认 10s）。
-    这里子类重写 _call：狗断连时 Move/StopMove 0.5s 内返回失败，安全控制器
-    才能 0.5s 级 disarm（对齐 C++ sdk_timeout=0.5）。Init() 的 connect() 不
-    经过 _call，仍用 10s，不受影响。
+    这里子类重写 _call：狗的连接走 4G 时单条命令往返可能超过 0.5s（实测
+    0.5s 会超时导致 Move/StopMove 收不到），3.0s 给足余量，失败仍能较快暴露。
+    注意：0.5s 断连故障响应不靠这个超时，而是安全控制器的 sport_state_timeout
+    （LF_SPORT_MOD_STATE 心跳丢失检测）。Init() 的 connect() 不经过 _call，
+    仍用 10s，不受影响。
     """
 
     def _call(self, api_id, parameter=None):
         try:
-            self.bridge.run(self._sport(api_id, parameter), timeout=0.5)
+            self.bridge.run(self._sport(api_id, parameter), timeout=3.0)
             return 0
         except Exception as e:
             rospy.logerr(f'WebRTC 命令失败 api_id={api_id}: {e}')
@@ -290,7 +294,8 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     except Exception as exc:
-        rclpy.logging.get_logger('go2_cmd_vel_bridge').fatal(str(exc))
+        rclpy.logging.get_logger('go2_cmd_vel_bridge').fatal(
+            f'{repr(exc)}\n{traceback.format_exc()}')
         if rclpy.ok():
             rclpy.shutdown()
         return 1
