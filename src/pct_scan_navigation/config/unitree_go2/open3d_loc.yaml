@@ -3,7 +3,7 @@ global_localization_node:
     map_name: "outdoor"
     # path_map: "/home/nav_map/cross-floor-kn/global_map_downsize.pcd"
     # path_imu_to_base: "/home/nav_map/cross-floor-kn/imu_to_base.txt"
-    path_map: "/workspace/kn_nav_ws/src/PCT_planner/rsc/pcd/dinggu7_6.pcd"
+    path_map: "/workspace/kn_nav_ws/src/PCT_planner/rsc/pcd/office_room.pcd"
     path_imu_to_base: ""
 
     pcd_queue_maxsize: 10
@@ -23,7 +23,7 @@ global_localization_node:
 
     max_icp_translation: 0.4
     max_icp_yaw_deg: 2.0
-    max_init_icp_translation: 2.0
+    max_init_icp_translation: 5.0
     max_init_icp_yaw_deg: 20.0
     min_init_fitness_improvement: 0.02
     min_source_points: 500

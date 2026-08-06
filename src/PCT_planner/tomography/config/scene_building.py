@@ -4,6 +4,7 @@ from .scene import ScenePCD, SceneMap, SceneTrav
 class SceneBuilding():
     pcd = ScenePCD()
     pcd.file_name = 'building2_9.pcd'
+    # pcd.file_name = 'dinggu7_6.pcd'
 
     map = SceneMap()
     map.resolution = 0.10
