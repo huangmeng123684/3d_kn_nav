@@ -9,10 +9,14 @@ log/
 **/__pycache__/
 *.pyc
 
+xauth_host
+
 .colcon/
 .vscode/
 .idea/
 
+
+*.pickle
 *.o
 *.so
 *.so.4
