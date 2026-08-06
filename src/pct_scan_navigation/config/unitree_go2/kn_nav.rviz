@@ -1,0 +1,317 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    # ====== TF (最底层) ======
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Frame Timeout: 15
+      All Enabled: false
+      Marker Scale: 0.5
+      Show Arrows: true
+      Update Interval: 0
+
+    # ====== Open3D 定位 ======
+    - Class: rviz_default_plugins/Odometry
+      Name: Odometry_open3d
+      Enabled: true
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /Odometry_open3d
+      Color: 255; 85; 255
+      Position Tolerance: 0.1
+      Angle Tolerance: 0.1
+      Keep: 100
+      Shaft Length: 0.3
+      Head Length: 0.1
+      Shaft Diameter: 0.05
+      Head Diameter: 0.15
+      Shape: Arrow
+
+    - Class: rviz_default_plugins/Odometry
+      Name: Odometry_loc
+      Enabled: false
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /Odometry_loc
+      Color: 255; 255; 85
+      Position Tolerance: 0.1
+      Angle Tolerance: 0.1
+      Keep: 100
+      Shaft Length: 0.3
+      Head Length: 0.1
+      Shaft Diameter: 0.05
+      Head Diameter: 0.15
+      Shape: Arrow
+
+    # ====== 点云地图 ======
+    - Alpha: 0.7
+      Class: rviz_default_plugins/PointCloud2
+      Color Transformer: Intensity
+      Name: tomogram (通行度)
+      Enabled: true
+      Style: Flat Squares
+      Size (m): 0.1
+      Size (Pixels): 3
+      Topic:
+        Depth: 1
+        Reliability Policy: Reliable
+        Value: /tomogram
+      Use Fixed Frame: true
+      Use rainbow: true
+      Invert Rainbow: false
+      Min Intensity: 0
+      Max Intensity: 1
+      Autocompute Intensity Bounds: true
+
+    - Alpha: 0.6
+      Class: rviz_default_plugins/PointCloud2
+      Color Transformer: RGB8
+      Name: scan_map
+      Enabled: true
+      Style: Flat Squares
+      Size (m): 0.03
+      Size (Pixels): 2
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /scan_map
+      Use Fixed Frame: true
+
+    - Alpha: 0.3
+      Class: rviz_default_plugins/PointCloud2
+      Color Transformer: Intensity
+      Name: Laser_map_1 (FAST-LIO)
+      Enabled: false
+      Style: Points
+      Size (m): 0.05
+      Size (Pixels): 2
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /Laser_map_1
+      Use Fixed Frame: true
+
+    - Alpha: 0.5
+      Class: rviz_default_plugins/PointCloud2
+      Color Transformer: Intensity
+      Name: cloud_registered_body
+      Enabled: false
+      Style: Points
+      Size (m): 0.03
+      Size (Pixels): 2
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /cloud_registered_body_1
+      Use Fixed Frame: true
+
+    - Alpha: 0.5
+      Class: rviz_default_plugins/PointCloud2
+      Color Transformer: RGB8
+      Name: map_3d
+      Enabled: false
+      Style: Points
+      Size (m): 0.05
+      Size (Pixels): 2
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /map_3d
+      Use Fixed Frame: true
+
+    # ====== PCT 规划 ======
+    - Class: rviz_default_plugins/Path
+      Name: pct_path (平滑路径)
+      Enabled: true
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /pct_path
+      Color: 0; 255; 0
+      Line Style: Solid
+      Line Width: 0.05
+      Alpha: 0.8
+      Shaft Diameter: 0.02
+      Head Length: 0.1
+      Head Diameter: 0.1
+
+    - Class: rviz_default_plugins/Path
+      Name: pct_astar_path (A*原始)
+      Enabled: false
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /pct_astar_path
+      Color: 255; 255; 0
+      Line Style: Dashes
+      Line Width: 0.03
+      Alpha: 0.5
+
+    - Class: rviz_default_plugins/Marker
+      Name: pct_marker
+      Enabled: true
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /pct_marker
+
+    # ====== SCAN 局部规划 ======
+    - Class: rviz_default_plugins/Path
+      Name: scan_planner/waypoints
+      Enabled: true
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /scan_planner/waypoints
+      Color: 0; 170; 255
+      Line Style: Solid
+      Line Width: 0.03
+      Alpha: 0.8
+      Shaft Diameter: 0.02
+      Head Length: 0.1
+      Head Diameter: 0.1
+
+    - Class: rviz_default_plugins/Marker
+      Name: scan_planner/local_target
+      Enabled: true
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /scan_planner/local_target
+
+    - Class: rviz_default_plugins/Path
+      Name: path_1 (FAST-LIO)
+      Enabled: false
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /path_1
+      Color: 255; 170; 0
+      Line Style: Solid
+      Line Width: 0.03
+      Alpha: 0.6
+
+    # ====== SCAN grid_map ======
+    - Alpha: 0.5
+      Class: rviz_default_plugins/PointCloud2
+      Color Transformer: FlatColor
+      Name: grid_map/occupancy
+      Enabled: false
+      Style: Flat Squares
+      Size (m): 0.05
+      Size (Pixels): 2
+      Color: 255; 0; 0
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /grid_map/occupancy
+      Use Fixed Frame: true
+
+    - Alpha: 0.3
+      Class: rviz_default_plugins/PointCloud2
+      Color Transformer: FlatColor
+      Name: grid_map/occupancy_inflate
+      Enabled: false
+      Style: Flat Squares
+      Size (m): 0.05
+      Size (Pixels): 2
+      Color: 255; 127; 0
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /grid_map/occupancy_inflate
+      Use Fixed Frame: true
+
+    # ====== SCAN 可视化 Marker ======
+    - Class: rviz_default_plugins/Marker
+      Name: a_star_list
+      Enabled: false
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /a_star_list
+
+    - Class: rviz_default_plugins/Marker
+      Name: optimal_list
+      Enabled: false
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /optimal_list
+
+    - Class: rviz_default_plugins/Marker
+      Name: init_list
+      Enabled: false
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /init_list
+
+    - Class: rviz_default_plugins/Marker
+      Name: global_list
+      Enabled: false
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /global_list
+
+    - Class: rviz_default_plugins/Marker
+      Name: goal_point
+      Enabled: false
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /goal_point
+
+    - Class: rviz_default_plugins/Marker
+      Name: self_inflation
+      Enabled: false
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /self_inflation
+
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/Measure
+    - Class: rviz_default_plugins/SetInitialPose
+      Topic: /initialpose
+    - Class: rviz_default_plugins/SetGoal
+      Topic: /goal_pose
+    - Class: rviz_default_plugins/PublishPoint
+      Topic: /clicked_point
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 20
+      Focal Point:
+        X: 13.0
+        Y: 10.0
+        Z: 1.0
+      Name: Current View
+      Pitch: 0.8
+      Target Frame: map
+      Yaw: 0.0
+    Saved:
+      - Class: rviz_default_plugins/TopDownOrtho
+        Name: Top View
+        Target Frame: map
+        Y: 20
+Window Geometry:
+  Height: 900
+  Width: 1400
