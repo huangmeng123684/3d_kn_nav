@@ -37,7 +37,7 @@ except ImportError:
 
     def _make_logger(level):
         def _log(msg, *args, **kwargs):
-            print(f'[{level}] {msg}')
+            print(f'[{level}] {msg}', flush=True)
 
         return _log
 
@@ -69,19 +69,20 @@ from webrtc_sport_client import WebRTCSportClient  # noqa: E402
 
 
 class FastWebRTCSportClient(WebRTCSportClient):
-    """重写 _call：运动 RPC 命令超时设为 3.0s。
+    """重写 _call：运动 RPC 命令超时设为 10.0s，与基类 AsyncBridge.run 默认一致。
 
     webrtc_sport_client.py 保持原样不改（其 _call 用 bridge.run 默认 10s）。
-    这里子类重写 _call：狗的连接走 4G 时单条命令往返可能超过 0.5s（实测
-    0.5s 会超时导致 Move/StopMove 收不到），3.0s 给足余量，失败仍能较快暴露。
-    注意：0.5s 断连故障响应不靠这个超时，而是安全控制器的 sport_state_timeout
+    这里子类重写 _call：狗的连接走 4G 时单条命令往返波动大，3.0s 实测不够，
+    Move/StopMove 偶尔超时返回 -1 导致安全控制器 disarm，故放宽到 10.0s
+    与基类默认一致，失败仍能在 10s 内暴露。
+    注意：断连故障响应不靠这个超时，而是安全控制器的 sport_state_timeout
     （LF_SPORT_MOD_STATE 心跳丢失检测）。Init() 的 connect() 不经过 _call，
-    仍用 10s，不受影响。
+    用 30s，不受影响。
     """
 
     def _call(self, api_id, parameter=None):
         try:
-            self.bridge.run(self._sport(api_id, parameter), timeout=3.0)
+            self.bridge.run(self._sport(api_id, parameter), timeout=10.0)
             return 0
         except Exception as e:
             rospy.logerr(f'WebRTC 命令失败 api_id={api_id}: {e}')
@@ -109,10 +110,22 @@ class Go2CmdVelBridge(Node):
         self.declare_parameter('command_timeout', 0.3)
         self.declare_parameter('odometry_timeout', 0.3)
         self.declare_parameter('sport_state_timeout', 0.5)
+        self.declare_parameter('bypass_safety', False)
 
         robot_ip = self.get_parameter('robot_ip').value
         if not robot_ip:
             raise ValueError('robot_ip is required (Go2 STA IP, e.g. 192.168.123.161)')
+
+        # bypass_safety=true：跳过 Go2SafetyController，启动即 armed，/cmd_vel
+        # 直接转发给狗的 Move。仍保留三条底线：finite 检查、速度 clamp、
+        # cmd_vel 断流归零 + Move 失败归零（防上游停发/连接断后狗持续冲）。
+        self._bypass = bool(self.get_parameter('bypass_safety').value)
+        self._bypass_last_cmd = Go2VelocityCommand()
+        self._bypass_last_cmd_time = None
+        if self._bypass:
+            self._bypass_max_vx = float(self.get_parameter('max_vx').value)
+            self._bypass_max_vy = float(self.get_parameter('max_abs_vy').value)
+            self._bypass_max_vyaw = float(self.get_parameter('max_abs_vyaw').value)
 
         control_rate = self.get_parameter('control_rate').value
         if not (control_rate > 0.0):
@@ -148,19 +161,23 @@ class Go2CmdVelBridge(Node):
                     pass
             raise
 
-        self._controller = Go2SafetyController(self._client, config)
+        self._controller = None
+        if not self._bypass:
+            self._controller = Go2SafetyController(self._client, config)
 
         # ── sportmodestate 心跳（替代 C++ 的 DDS rt/sportmodestate）。
-        #    回调在 asyncio 后台线程触发，controller 内部有锁，线程安全。──
-        async def _subscribe_sport_state():
-            self._client.conn.datachannel.pub_sub.subscribe(
-                RTC_TOPIC['LF_SPORT_MOD_STATE'],
-                lambda message: self._controller.updateSportStateHeartbeat(
-                    time.monotonic()
-                ),
-            )
+        #    回调在 asyncio 后台线程触发，controller 内部有锁，线程安全。
+        #    bypass 模式不需要心跳，跳过订阅。──
+        if not self._bypass:
+            async def _subscribe_sport_state():
+                self._client.conn.datachannel.pub_sub.subscribe(
+                    RTC_TOPIC['LF_SPORT_MOD_STATE'],
+                    lambda message: self._controller.updateSportStateHeartbeat(
+                        time.monotonic()
+                    ),
+                )
 
-        self._client.bridge.run(_subscribe_sport_state())
+            self._client.bridge.run(_subscribe_sport_state())
 
         # ── ROS 接口（与 C++ 版完全一致）──
         armed_qos = QoSProfile(
@@ -176,22 +193,31 @@ class Go2CmdVelBridge(Node):
             Twist, '/cmd_vel', self._command_cb, 10)
         self._sub_odom = self.create_subscription(
             Odometry, '/Odometry_open3d', self._odometry_cb, 10)
-        self._srv_enable = self.create_service(
-            SetBool, '/go2_cmd_vel_bridge/enable', self._enable_cb)
+        if not self._bypass:
+            self._srv_enable = self.create_service(
+                SetBool, '/go2_cmd_vel_bridge/enable', self._enable_cb)
 
         period = 1.0 / control_rate
         self._timer = self.create_timer(period, self._control_tick)
 
-        self._publish_armed(False)
+        self._publish_armed(self._bypass)
         self._publish_safe_command(Go2VelocityCommand())
-        self.get_logger().info(
-            f"Go2 cmd_vel bridge initialized via WebRTC to '{robot_ip}'; "
-            'bridge is DISABLED and will not change posture')
+        if self._bypass:
+            self.get_logger().warn(
+                'BYPASS SAFETY MODE: /cmd_vel drives the dog directly; '
+                'heartbeat/ramp/fault checks are disabled')
+        else:
+            self.get_logger().info(
+                f"Go2 cmd_vel bridge initialized via WebRTC to '{robot_ip}'; "
+                'bridge is DISABLED and will not change posture')
 
     # ------------------------------------------------------------------
     # ROS callbacks
     # ------------------------------------------------------------------
     def _command_cb(self, msg):
+        if self._bypass:
+            self._bypass_command_cb(msg)
+            return
         command = Go2VelocityCommand(msg.linear.x, msg.linear.y, msg.angular.z)
         was_armed = self._controller.armed()
         _, reason = self._controller.acceptCommand(command, time.monotonic())
@@ -205,6 +231,8 @@ class Go2CmdVelBridge(Node):
         self._publish_safe_command(command)
 
     def _odometry_cb(self, msg):
+        if self._bypass:
+            return
         if not self._finite_odometry(msg):
             if self._throttled('odom_nonfinite', 2.0):
                 self.get_logger().error(
@@ -235,6 +263,9 @@ class Go2CmdVelBridge(Node):
         return response
 
     def _control_tick(self):
+        if self._bypass:
+            self._bypass_tick()
+            return
         was_armed = self._controller.armed()
         self._controller.tick(time.monotonic())
         is_armed = self._controller.armed()
@@ -247,6 +278,44 @@ class Go2CmdVelBridge(Node):
             if not is_armed:
                 self.get_logger().error(
                     f'Safety fault: {fault}; bridge is now DISABLED')
+
+    # ------------------------------------------------------------------
+    # bypass safety mode
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _clamp(value, low, high):
+        return max(low, min(high, value))
+
+    def _bypass_command_cb(self, msg):
+        command = Go2VelocityCommand(msg.linear.x, msg.linear.y, msg.angular.z)
+        if not all(math.isfinite(x) for x in (command.vx, command.vy, command.vyaw)):
+            if self._throttled('bypass_nonfinite', 2.0):
+                self.get_logger().error('Ignoring non-finite /cmd_vel in bypass mode')
+            return
+        command.vx = self._clamp(command.vx, -self._bypass_max_vx, self._bypass_max_vx)
+        command.vy = self._clamp(command.vy, -self._bypass_max_vy, self._bypass_max_vy)
+        command.vyaw = self._clamp(command.vyaw, -self._bypass_max_vyaw, self._bypass_max_vyaw)
+        self._bypass_last_cmd = command
+        self._bypass_last_cmd_time = time.monotonic()
+        self._publish_safe_command(command)
+
+    def _bypass_tick(self):
+        now = time.monotonic()
+        if self._bypass_last_cmd_time is None or now - self._bypass_last_cmd_time > 0.5:
+            target = Go2VelocityCommand()  # 断流归零
+            if self._throttled('bypass_stale', 2.0):
+                self.get_logger().warn('cmd_vel stale; sending zero velocity')
+        else:
+            target = self._bypass_last_cmd
+        result = self._client.Move(target.vx, target.vy, target.vyaw)
+        if result != 0:
+            # Move 失败：归零，防止连接异常时狗维持指令冲出去
+            self._bypass_last_cmd = Go2VelocityCommand()
+            target = Go2VelocityCommand()
+            if self._throttled('bypass_move_fail', 2.0):
+                self.get_logger().error(
+                    f'Move failed with code {result}; command reset to zero')
+        self._publish_safe_command(target)
 
     # ------------------------------------------------------------------
     # helpers
@@ -278,10 +347,11 @@ class Go2CmdVelBridge(Node):
         self._pub_safe_cmd.publish(msg)
 
     def _shutdown_bridge(self):
-        try:
-            self._controller.shutdown()
-        except Exception as exc:
-            self.get_logger().warn(f'safety controller shutdown failed: {exc}')
+        if self._controller is not None:
+            try:
+                self._controller.shutdown()
+            except Exception as exc:
+                self.get_logger().warn(f'safety controller shutdown failed: {exc}')
         try:
             self._client.cleanup()
         except Exception as exc:

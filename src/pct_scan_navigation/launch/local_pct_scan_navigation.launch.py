@@ -103,6 +103,8 @@ def generate_launch_description():
     config_profile = LaunchConfiguration('config_profile')
     navigation_mode = LaunchConfiguration('navigation_mode')
     navigation_mode_value = ParameterValue(navigation_mode, value_type=int)
+    bypass_safety = LaunchConfiguration('bypass_safety')
+    bypass_safety_value = ParameterValue(bypass_safety, value_type=bool)
 
     # navigation_share = FindPackageShare('pct_scan_navigation')
     # navigation_share = str(Path.home() / 'nav_map')
@@ -184,6 +186,7 @@ def generate_launch_description():
         name='go2_cmd_vel_bridge', output='both',
         parameters=[navigation_config('go2_bridge.yaml'), {
             'use_sim_time': use_sim_time,
+            'bypass_safety': bypass_safety_value,
         }],
         condition=IfCondition(start_go2_bridge),
     )
@@ -201,6 +204,7 @@ def generate_launch_description():
         DeclareLaunchArgument('start_open3d_loc', default_value='true'),
         DeclareLaunchArgument('start_pct_planner', default_value='true'),
         DeclareLaunchArgument('start_go2_bridge', default_value='false'),
+        DeclareLaunchArgument('bypass_safety', default_value='false'),
         DeclareLaunchArgument('network_interface', default_value='enp2s0'),
         DeclareLaunchArgument('scan_params_file', default_value=navigation_config('scan_planner.yaml')),
         DeclareLaunchArgument('coordinator_params_file', default_value=navigation_config('coordinator.yaml')),

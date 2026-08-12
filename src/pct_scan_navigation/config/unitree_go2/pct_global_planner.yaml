@@ -11,7 +11,7 @@ pct_global_planner:
     # ── Planning map ───────────────────────────────────────────────────────
     # Absolute path to the pre-built tomogram pickle
     # tomo_path: "/home/code/work_space/kn_nav/src/PCT_planner/rsc/tomogram/liuxing_ground_voxel005_radius015.pickle"
-    tomo_path: "/workspace/kn_nav_ws/src/PCT_planner/rsc/tomogram/office_room.pickle"
+    tomo_path: "/workspace/kn_nav_ws/src/PCT_planner/rsc/tomogram/clean_data.pickle"
 
     # ── TF frames ──────────────────────────────────────────────────────────
     # Planning frame (must match /pct_path frame_id and tomogram coordinates)

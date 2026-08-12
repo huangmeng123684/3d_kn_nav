@@ -3,9 +3,9 @@ maps:
     # pcd_path: "/home/nav_map/cross-floor-kn/global_map_downsize.pcd"
 
     # tomo_path: "/home/code/work_space/kn_nav/src/PCT_planner/rsc/tomogram/liuxing_ground_voxel005_radius015.pickle"
-    pcd_path: "/workspace/kn_nav_ws/src/PCT_planner/rsc/pcd/office_room.pcd"
+    pcd_path: "/workspace/kn_nav_ws/src/PCT_planner/rsc/pcd/clean_data.pcd"
     
-    tomo_path: "/workspace/kn_nav_ws/src/PCT_planner/rsc/tomogram/office_room.pickle"
+    tomo_path: "/workspace/kn_nav_ws/src/PCT_planner/rsc/tomogram/clean_data.pickle"
     localization:
       fitness_eval_threshold: 0.15
       threshold_fitness: 0.5

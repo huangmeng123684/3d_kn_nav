@@ -57,7 +57,7 @@ class WebRTCSportClient:
 
     def Init(self):
         rospy.loginfo(f"WebRTC 连接机器狗: {self.ip}")
-        self.bridge.run(self.conn.connect())
+        self.bridge.run(self.conn.connect(), timeout=30)
         self.bridge.run(self._ensure_normal_mode())
         self.bridge.run(self._sport(SPORT_CMD["FreeWalk"], {}))
         self._ready = True
