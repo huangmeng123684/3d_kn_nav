@@ -78,3 +78,4 @@ closed_loop_controller:
     max_vyaw: 0.50
     finish_dist: 0.15
     finish_yaw: 0.10
+    finish_timeout: 3.0

@@ -81,6 +81,7 @@ class Go2SafetyController:
         self._lock = threading.RLock()
 
         self._armed = False
+        self._stopped = True          # 是否已处于停止态（零速去抖用）
         self._waiting_for_command = True
         self._odometry_received = False
         self._sport_state_received = False
@@ -137,6 +138,7 @@ class Go2SafetyController:
 
             self._target_command = Go2VelocityCommand()
             self._last_output = Go2VelocityCommand()
+            self._stopped = True
             self._command_received = False
             self._waiting_for_command = True
             self._last_tick_time = now
@@ -148,6 +150,7 @@ class Go2SafetyController:
         with self._lock:
             self._send_stop()
             self._armed = False
+            self._stopped = True
             self._waiting_for_command = True
             self._command_received = False
             self._target_command = Go2VelocityCommand()
@@ -170,11 +173,18 @@ class Go2SafetyController:
             self._waiting_for_command = False
 
             if self._command_is_zero(self._target_command):
-                if not self._send_stop():
-                    reason = 'failed to stop for zero cmd_vel'
-                    self._fault_and_disarm(reason)
-                    return False, reason
+                # 去抖：仅在“由动转停”时下发一次 StopMove。上游零速命令可能
+                # 以高频率到达（闭环控制器 100Hz 发零速），若每条零速都
+                # StopMove，会反复打断狗的 SportMode，造成顿挫/漂移。
+                if not self._stopped:
+                    if not self._send_stop():
+                        reason = 'failed to stop for zero cmd_vel'
+                        self._fault_and_disarm(reason)
+                        return False, reason
+                    self._stopped = True
                 self._last_tick_time = now
+            else:
+                self._stopped = False
 
             return True, ''
 
@@ -228,6 +238,7 @@ class Go2SafetyController:
             if result != 0:
                 self._fault_and_disarm(f'SportClient::Move failed with code {result}')
                 return
+            self._stopped = False
             self._last_output = nxt
 
     def shutdown(self):
@@ -286,6 +297,7 @@ class Go2SafetyController:
     def _fault_and_disarm(self, reason):
         self._send_stop()
         self._armed = False
+        self._stopped = True
         self._waiting_for_command = True
         self._command_received = False
         self._target_command = Go2VelocityCommand()
@@ -293,7 +305,8 @@ class Go2SafetyController:
         self._last_fault = reason
 
     def _send_stop(self):
-        move_result = self._sport_client.Move(0.0, 0.0, 0.0)
+        # 只发 StopMove，不再附带 Move(0,0,0)：上游零速命令可能以高频率到达，
+        # 每次 Move(0,0,0)+StopMove 会反复打断狗的 SportMode，导致顿挫/漂移。
         stop_result = self._sport_client.StopMove()
         self._last_output = Go2VelocityCommand()
-        return move_result == 0 and stop_result == 0
+        return stop_result == 0

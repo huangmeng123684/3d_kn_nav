@@ -31,6 +31,7 @@ public:
     max_vyaw_ = std::min(declare_parameter<double>("max_vyaw", 1.0), kMaxVYawLimit);
     finish_dist_ = declare_parameter<double>("finish_dist", 0.15);
     finish_yaw_ = declare_parameter<double>("finish_yaw", 0.10);
+    finish_timeout_ = declare_parameter<double>("finish_timeout", 3.0);
 
     bspline_sub_ = create_subscription<scan_planner_msgs::msg::Bspline>(
         "planning/bspline", 10,
@@ -114,6 +115,7 @@ private:
     last_update_time_ = now();
     receive_traj_ = true;
     task_completed_ = false;
+    at_end_guard_ = false;
     RCLCPP_INFO(get_logger(), "Received trajectory %lld, duration %.3fs",
                 static_cast<long long>(traj_id_), traj_duration_);
   }
@@ -146,7 +148,34 @@ private:
     Eigen::Vector3d pos_des = traj_[0].evaluateDeBoorT(t_eval);
     const Eigen::Vector2d final_pos_error(pos_des.x() - odom_pos_.x(),
                                           pos_des.y() - odom_pos_.y());
-    if (exec_time_ >= traj_duration_ && final_pos_error.norm() <= finish_dist_)
+    const bool at_traj_end = exec_time_ >= traj_duration_;
+    if (at_traj_end && final_pos_error.norm() > finish_dist_)
+    {
+      // 轨迹时间已走完但还没到 finish_dist：正常时闭环会把车拉向终点；
+      // 若持续超过 finish_timeout_ 仍到不了，则保持停止并告警，避免无限爬行/漂移。
+      if (!at_end_guard_)
+      {
+        at_end_guard_ = true;
+        end_guard_since_ = current_time;
+      }
+      else if ((current_time - end_guard_since_).seconds() > finish_timeout_)
+      {
+        RCLCPP_WARN(get_logger(),
+                    "Trajectory %lld ended but goal not reached (err %.3f m) for "
+                    "%.1f s; holding stop to avoid endless creep",
+                    static_cast<long long>(traj_id_), final_pos_error.norm(),
+                    finish_timeout_);
+        task_completed_ = true;
+        publishExecutionFrozen(false);
+        publishStop();
+        return;
+      }
+    }
+    else
+    {
+      at_end_guard_ = false;
+    }
+    if (at_traj_end && final_pos_error.norm() <= finish_dist_)
     {
       publishExecutionFrozen(false);
       last_update_time_ = current_time;
@@ -203,6 +232,7 @@ private:
   bool have_odom_{false};
   bool have_final_yaw_{false};
   bool task_completed_{false};
+  bool at_end_guard_{false};
   std::vector<UniformBspline> traj_;
   double traj_duration_{0.0};
   std::int64_t traj_id_{0};
@@ -211,8 +241,9 @@ private:
   double final_yaw_{0.0};
   double exec_time_{0.0};
   rclcpp::Time last_update_time_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time end_guard_since_{0, 0, RCL_ROS_TIME};
   double time_forward_, heading_error_threshold_, kp_pos_, kp_yaw_;
-  double max_vx_, max_vy_, max_vyaw_, finish_dist_, finish_yaw_;
+  double max_vx_, max_vy_, max_vyaw_, finish_dist_, finish_yaw_, finish_timeout_;
 };
 }  // namespace scan_planner
 
