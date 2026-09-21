@@ -5,6 +5,18 @@ from kernels import *
 
 
 class Tomogram(object):
+    """
+    GPU 版 tomogram 构建器。
+
+    其作用相当于把点云转成 multi-layer elevation + traversability map。
+    核心流程：
+    1. 将点云投到体素坐标系中；
+    2. 按层统计地面高度和天花板高度；
+    3. 计算梯度与 traversability cost；
+    4. 进行 inflation 和 layer simplification；
+    5. 输出最终地图数据。
+    """
+
     def __init__(self, cfg):
         self.resolution = cfg.map.resolution
         self.slice_dh = cfg.map.slice_dh
@@ -20,6 +32,14 @@ class Tomogram(object):
         self.half_inf_k_size = int((self.safe_margin + self.inflation) / self.resolution)
 
     def initKernel(self):
+        """
+        初始化 CUDA kernel 和相关参数表。
+
+        这里创建三个核心 kernel：
+        - tomographyKernel：逐点写入 each-layer ground / ceiling
+        - travKernel：计算 traversability cost
+        - inflationKernel：对 cost 做膨胀/平滑
+        """
         self.tomography_kernel = tomographyKernel(
             self.resolution, 
             self.map_dim_x, 
@@ -63,6 +83,9 @@ class Tomogram(object):
                 )
 
     def initBuffers(self):
+        """
+        分配 GPU 端缓存，用于存储每层地形、高度、梯度和 traversability 成本。
+        """
         self.layers_g = cp.zeros((self.n_slice_init, self.map_dim_x, self.map_dim_y), dtype=cp.float32)
         self.layers_c = cp.zeros((self.n_slice_init, self.map_dim_x, self.map_dim_y), dtype=cp.float32)
         self.grad_mag_sq = cp.zeros((self.n_slice_init, self.map_dim_x, self.map_dim_y), dtype=cp.float32)
@@ -71,6 +94,13 @@ class Tomogram(object):
         self.inflated_cost = cp.zeros((self.n_slice_init, self.map_dim_x, self.map_dim_y), dtype=cp.float32)
 
     def initMappingEnv(self, center, map_dim_x, map_dim_y, n_slice_init, slice_h0):
+        """
+        设置地图环境参数：
+        - center：地图中心
+        - map_dim_x / map_dim_y：网格尺寸
+        - n_slice_init：初始分层数量
+        - slice_h0：底层起始高度
+        """
         self.center = cp.array(center, dtype=cp.float32)
         self.map_dim_x = int(map_dim_x)
         self.map_dim_y = int(map_dim_y)
@@ -81,6 +111,10 @@ class Tomogram(object):
         self.initKernel()
 
     def clearMap(self):
+        """
+        清空当前层缓存；
+        把 ground/ceiling 设置成极大/极小值，方便后续 atomicMax / atomicMin 更新。
+        """
         self.layers_g *= 0.
         self.layers_c *= 0.
         self.layers_g += -1e6
@@ -92,6 +126,17 @@ class Tomogram(object):
         self.inflated_cost *= 0.
 
     def point2map(self, points):
+        """
+        点云到 tomogram 的核心转换函数。
+
+        它按顺序执行：
+        - 地面/天花板层统计
+        - 梯度计算
+        - traversability cost
+        - inflation 膨胀
+        - layer simplification
+        - 把 GPU 数据回到 CPU 端并返回
+        """
         points = cp.asarray(points)
         points = points[~cp.isnan(points).any(axis=1)]
         self.clearMap()

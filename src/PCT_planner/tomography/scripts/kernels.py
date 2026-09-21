@@ -3,6 +3,14 @@ import cupy as cp
 
 
 def utils_point(resolution, n_row, n_col):
+    """
+    2D 点到地图索引转换所需的 CUDA helper 函数。
+
+    作用：
+    - 把 (x, y) 转成网格索引
+    - 把图层索引和 2D index 组合成 multi-layer 中的一维索引
+    - 提供 atomicMax / atomicMin，用于更稳地更新 ground / ceiling
+    """
     util_preamble = string.Template(
         '''
         __device__ int getIndexLine(float x, float center)
@@ -68,6 +76,12 @@ def utils_point(resolution, n_row, n_col):
 
 
 def utils_map(n_row, n_col):
+    """
+    2D/3D 局部邻域访问辅助函数。
+
+    主要用于 inflation 和局部邻域遍历，
+    例如查看某个点周围的滤波窗口，计算邻域成本或是否可站立。
+    """
     util_preamble=string.Template(
         '''
         __device__ int getIdxRelative(int idx, int dx, int dy) 
@@ -97,6 +111,13 @@ def utils_map(n_row, n_col):
 
 
 def tomographyKernel(resolution, n_row, n_col, n_slice, slice_h0, slice_dh):
+    """
+    将每个 3D 点映射到不同高度层，并维护每个 voxel 的：
+    - ground: 该层中最低/最高的地面高度
+    - ceiling: 该层中最高的天花板高度
+
+    也就是每个体素位置在各层里可以看到一个“地形上界/下界”。
+    """
     tomography_kernel = cp.ElementwiseKernel(
         in_params='raw U points, raw U center',
         out_params='raw U layers_g, raw U layers_c',
@@ -134,6 +155,12 @@ def travKernel(
     n_row, n_col, half_kernel_size,
     interval_min, interval_free, step_cross, step_stand, standable_th, cost_barrier
     ):
+    """
+    traversability kernel.
+
+    基于高度层间距、坡度和局部可站立性来计算每个栅格的代价，
+    它决定了地图上哪些位置更容易走、哪些位置更危险。
+    """
     trav_kernel = cp.ElementwiseKernel(
         in_params='raw U interval, raw U grad_mag_sq, raw U grad_mag_max',
         out_params='raw U trav_cost',
@@ -199,6 +226,10 @@ def travKernel(
 
 
 def inflationKernel(n_row, n_col, half_kernel_size):
+    """
+    对 traversability cost 做膨胀处理，
+    让障碍临近区域也获得更高代价以保证安全裕度。
+    """
     inflation_kernel = cp.ElementwiseKernel(
         in_params='raw U trav_cost, raw U score_table',
         out_params='raw U inflated_cost',

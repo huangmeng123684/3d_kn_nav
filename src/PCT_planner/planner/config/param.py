@@ -3,7 +3,7 @@ class ConfigPlanner():
     max_heading_rate = 10
     a_star_cost_threshold = 20.0
     step_cost_weight = 0.50
-    optimizer_cost_threshold = 10.0
+    optimizer_cost_threshold = 15.0
     safe_cost_margin = optimizer_cost_threshold
     use_clearance_cost = True
     clearance_cost_mode = "relative"

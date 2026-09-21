@@ -55,6 +55,7 @@ void Astar::Init(const double cost_threshold, const int num_layers,
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::high_resolution_clock::now() - t0);
 
+  search_layer_depth_ = num_layers;
   search_layers_offset_.clear();
   search_layers_offset_.emplace_back(0);
   for (int i = 0; i < search_layer_depth_; ++i) {
@@ -172,7 +173,7 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
       // The previous `step_cost < 5` dead zone zeroed every allowed cost with
       // the configured threshold/weight, reducing the search to pure distance.
       const double step_cost =
-          step_cost_weight_ * std::max(0.0, neighbor_node->search_cost);
+          step_cost_weight_ * std::max(0.0, neighbor_node->cost);
       tentative_g =
           current_node->g +
           std::sqrt(diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]) +

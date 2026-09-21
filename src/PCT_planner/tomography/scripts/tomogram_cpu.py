@@ -47,7 +47,12 @@ _NP_TYPE = {
 
 
 def _lzf_decompress(src, out_len):
-    """libLZF decompression (used by PCL binary_compressed PCD)."""
+    """
+    LZF 压缩解码，用于 PCL 的 binary_compressed PCD。
+
+    这是 PCD 读取中最容易遇到的压缩格式之一。它和 zip/gzip 不一样，
+    需要用特定的块引用方式恢复原始字节流；解码完成后才可以提取点云 xyz.
+    """
     out = bytearray()
     i = 0
     n = len(src)
@@ -73,7 +78,16 @@ def _lzf_decompress(src, out_len):
 
 
 def read_pcd(path):
-    """Read a PCD file into an Nx3 float32 array (x, y, z)."""
+    """
+    读取 PCD 文件，返回 Nx3 的点云数组 [x, y, z]。
+
+    这里支持：
+    - ascii
+    - binary
+    - binary_compressed
+
+    这是整个 tomography 流程的第一步。没有这一步，就无法构建地图和检测可通行区域。
+    """
     with open(path, 'rb') as f:
         header = b''
         while True:
@@ -170,7 +184,13 @@ def read_pcd(path):
 
 
 def voxel_downsample(points, voxel_size):
-    """Keep one point per cubic voxel (first point seen). <=0 disables."""
+    """
+    对点云做 voxel downsample。
+
+    作用是把离散点浓密区域压缩成一个代表点，能降低数据量，
+    特别适合大规模地图处理；
+    当 voxel_size <= 0 时，表示禁用下采样。
+    """
     if voxel_size <= 0:
         return points
     q = np.floor(points[:, :3] / voxel_size)
@@ -183,12 +203,23 @@ def voxel_downsample(points, voxel_size):
 # ── pure-numpy tomography pipeline ───────────────────────────────────────────
 
 def _round_half_away(x):
-    """C `round()` semantics (round half away from zero), vectorized."""
+    """
+    模拟 C 语言中的 round() 行为：四舍五入时远离 0。
+
+    在把点云投影到地图网格时，必须保证坐标四舍五入的行为与 GPU/CUDA 版本一致，
+    否则 voxel 对齐会出现偏差，导致两套实现输出不一致。
+    """
     return np.copysign(np.floor(np.abs(x) + 0.5), x)
 
 
 def _box_filter_sum(a, half):
-    """Sum over a square [-half, half]^2 window (same-slice, bounds clipped)."""
+    """
+    计算二维窗口内的加和，类似 box filter / sliding sum。
+
+    这个函数用于统计某个局部区域中满足条件的格子数量，例如：
+    评估一个点附近有多少个可站立区域；
+    它是 traversability 计算里关键的“局部平滑”步骤。
+    """
     a = a.astype(np.float32)
     H, W = a.shape[-2], a.shape[-1]
     ii = np.zeros((a.shape[0], H + 1, W + 1), np.float32)
@@ -207,6 +238,17 @@ def _box_filter_sum(a, half):
 
 
 def build_tomogram(points, resolution, ground_h, slice_dh, trav):
+    """
+    真正的体素地图构建主函数。
+
+    该函数从点云出发，执行以下关键步骤：
+    1. 归一化点云位置到地图坐标系。
+    2. 通过层切片统计每个 voxel 的 max/min 高度值。
+    3. 根据高度间隔计算 ground / ceiling 层。
+    4. 计算 traversability cost 与 inflation cost。
+    5. 执行 layer simplification，减少冗余层。
+    6. 输出与 GPU 版本完全兼容的字典格式。
+    """
     points = np.asarray(points, dtype=np.float32)
     points = points[~np.isnan(points).any(axis=1)]
 
@@ -362,6 +404,12 @@ def build_tomogram(points, resolution, ground_h, slice_dh, trav):
 
 
 def main():
+    """
+    命令行入口：
+    将 PCD 点云转换为 tomogram pickle 文件，供全局规划器使用。
+
+    输出格式与 GPU 版完全一致，因此直接替换实现即可。
+    """
     ap = argparse.ArgumentParser(
         description='CPU-only tomography: PCD -> tomogram pickle (no GPU)')
     ap.add_argument('--pcd', required=True, help='input PCD map')

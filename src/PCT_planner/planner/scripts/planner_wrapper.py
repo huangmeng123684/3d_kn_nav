@@ -13,6 +13,22 @@ rsg_root = os.path.dirname(os.path.abspath(__file__)) + '/../..'
 
 
 class TomogramPlanner(object):
+    """
+    TomogramPlanner
+    --------------
+    这是 PCT（Probability/Cost Tomogram）路径规划器的核心封装类。
+
+    它负责以下几部分工作：
+    1. 读取 tomogram（地形/高度/可 traversable 成本）数据。
+    2. 构建层级地图与 gateway 约束。
+    3. 计算 clearance cost，提升规划在边界附近的安全性。
+    4. 调用底层 A* / GPMP/trajectory optimizer 进行路径搜索与平滑。
+    5. 把优化后的结果转换回地图坐标系，输出 3D 轨迹。
+
+    整个类属于 planner 模块中的核心算法封装层，负责把原始体数据
+    转成可导航 traj。
+    """
+
     def __init__(self, cfg):
         self.cfg = cfg
 
@@ -54,6 +70,21 @@ class TomogramPlanner(object):
         self.last_astar_traj = None
 
     def loadTomogram(self, tomo_file):
+        """
+        加载 tomogram 数据文件。
+
+        数据文件中通常包含：
+        - data: 体数据（多层切片）
+        - resolution: 每个 voxel 的真实距离
+        - center: 地图中心点
+        - slice_h0 / slice_dh: 层切片高度参数
+
+        这个函数会将体数据拆分为：
+        - trav: traversability / cost map
+        - elev_g: 地形高度场
+        - elev_c: 与优化相关的高度/代价信息
+        然后调用 initPlanner 完成地图准备工作。
+        """
         with open(self.tomo_dir + tomo_file + '.pickle', 'rb') as handle:
             data_dict = pickle.load(handle)
 
@@ -80,6 +111,17 @@ class TomogramPlanner(object):
         self.initPlanner(trav, trav_gx, trav_gy, elev_g, elev_c)
         
     def initPlanner(self, trav, trav_gx, trav_gy, elev_g, elev_c):
+        """
+        初始化规划器的地图表示。
+
+        这里有两个关键步骤：
+        1. 计算 gateway：识别层间发生明显高度/通行性变化的位置，用于
+           约束 A* 或优化器跨层搜索时的“门槛”/“过渡区域”。
+        2. 将地图 cost 和梯度加入 clearance cost，并传给底层 ele_planner.
+
+        这样做的目的是让规划器不仅能搜索一条路径，还能在地形边界、
+        斜坡和高低差较大的区域附近保留更合理的安全裕度。
+        """
         diff_t = trav[1:] - trav[:-1]
         diff_g = np.abs(elev_g[1:] - elev_g[:-1])
 
@@ -117,8 +159,8 @@ class TomogramPlanner(object):
                 elev_g.reshape(-1, elev_g.shape[-1]).astype(np.double),
                 elev_c.reshape(-1, elev_c.shape[-1]).astype(np.double),
                 gateway.reshape(-1, gateway.shape[-1]),
-                planning_gy.reshape(-1, planning_gy.shape[-1]).astype(np.double),
-                -planning_gx.reshape(-1, planning_gx.shape[-1]).astype(np.double)
+                trav_gy.reshape(-1, trav_gy.shape[-1]).astype(np.double),
+                -trav_gx.reshape(-1, trav_gx.shape[-1]).astype(np.double)
             )
         except TypeError:
             self.planner.init_map(
@@ -136,6 +178,22 @@ class TomogramPlanner(object):
             )
 
     def add_clearance_cost(self, trav, trav_gx, trav_gy):
+        """
+        为可通行成本图添加 clearance cost（安全距离惩罚）。
+
+        作用：
+        - 对接近障碍物、边界和低可通行区域的点增加代价；
+        - 引导规划器优先走更“安全”的路径；
+        - 避免路径贴着危险边界运行。
+
+        这里使用的是距离变换：
+        distance_transform_edt 会给每个点计算到最近不可通行区域的距离，
+        距离越小，说明该点越靠近障碍，因此罚值越大。
+
+        mode 还支持两种策略：
+        - absolute: 绝对距离衰减惩罚
+        - relative: 相对局部窗口的清晰度惩罚
+        """
         planning_trav = trav.copy()
         planning_gx = trav_gx.copy()
         planning_gy = trav_gy.copy()
@@ -201,6 +259,16 @@ class TomogramPlanner(object):
         return planning_trav, planning_gx, planning_gy
 
     def plan(self, start_pos, end_pos):
+        """
+        总体规划入口函数。
+
+        流程分为三段：
+        1. 把起点/终点转成地图索引，并设置 A* 搜索起末点。
+        2. 调用底层 planner.plan 做全局/层级搜索，拿到 A* 路径。
+        3. 对 A* 路径做优化与高度重采样，输出最终 3D 轨迹。
+
+        输出为 Nx3 的轨迹数组，通常每行为 [x, y, z]。
+        """
         self.last_astar_traj = None
         self.start_idx[0] = self.pos2layer(start_pos)
         self.end_idx[0] = self.pos2layer(end_pos)
@@ -250,7 +318,14 @@ class TomogramPlanner(object):
         return self.last_astar_traj
 
     def sample_traj_heights(self, layers, cols, rows, fallback_heights):
-        """Sample tomogram elevation along optimized XY to avoid flat z output."""
+        """
+        根据优化后的 XY 位置重新采样高度（z）值。
+
+        这是一个关键修正：
+        优化器输出的轨迹可能存在高度过平、或未准确贴合地形的情况。
+        因此我们在每个轨迹点附近，从 elev_g（地形高程图）中寻找最接近
+        的高程值作为真实 z，避免路径“飘在空中”或“压在地面下”。
+        """
         sampled = np.asarray(fallback_heights, dtype=np.float64).copy()
         if self.elev_g is None:
             return sampled
@@ -265,6 +340,12 @@ class TomogramPlanner(object):
         return sampled
 
     def nearest_elevation(self, layer, row, col, search_radius=2):
+        """
+        在局部窗口内搜索最接近的地形高程值。
+
+        如果当前点的 elev_g 已经有有效值，就直接返回；
+        否则在附近半径范围内搜索最靠近的高程点，确保轨迹高度连续。
+        """
         layer = int(np.clip(layer, 0, self.n_slice - 1))
         row = int(np.clip(row, 0, self.map_dim[0] - 1))
         col = int(np.clip(col, 0, self.map_dim[1] - 1))
@@ -291,6 +372,13 @@ class TomogramPlanner(object):
         return float(local_elev[local_rows[nearest], local_cols[nearest]])
 
     def astar_path_to_map(self, path):
+        """
+        把 A* 搜索得到的网格路径转换回地图/world 坐标系。
+
+        这里的 path 是以 voxel 索引表示的网格路径，内部存储形式通常是
+        [layer, row, col] 或类似索引组合。我们需要把它重新换算成真实坐标，
+        以便在 RViz 或外部导航中可视化和进一步用于参考轨迹。
+        """
         path_idx = np.rint(path).astype(np.int32)
         layers = path_idx[:, 0]
         rows = path_idx[:, 1]
@@ -304,16 +392,45 @@ class TomogramPlanner(object):
         )
     
     def pos2idx(self, pos):
+        """
+        将 XY 坐标转换成地图索引。
+
+        这里使用 grid 坐标系和 world 坐标系之间的换算：
+        - world 坐标：真实位置
+        - grid 坐标：栅格索引
+
+        输出格式为 [col, row] 这种二维索引，适合底层 A* 使用。
+        """
         idx = self.pos2array_idx(pos)
         idx = np.array([idx[1], idx[0]], dtype=np.int32)
         return idx
 
     def pos2array_idx(self, pos):
+        """
+        把世界坐标转换成 tomogram 体素索引。
+
+        计算方法：
+        - 先减去地图中心 center
+        - 再除以 resolution，将米转换为格子数
+        - 最后加上 offset 使坐标从中心点对齐
+
+        所以这个函数是整个规划流程中最基础的坐标转换函数。
+        """
         pos = np.asarray(pos, dtype=np.float64) - self.center
         idx = np.round(pos / self.resolution).astype(np.int32) + self.offset
         return idx
 
     def pos2layer(self, pos):
+        """
+        根据 3D 点位置，选择最合适的 tomogram 层。
+
+        这是一个关键的层级选择函数：
+        - 通过 XY 坐标找到相邻栅格；
+        - 再根据 z 的高度从 elev_g 的各层中找出最接近的 slice layer；
+        - 如果点超出地图范围，则回退到 z 对应的层索引。
+
+        这样可以把 3D 任务点投影到最合适的地形层上，供底层搜索器使用。
+        """
         pos = np.asarray(pos, dtype=np.float64)
         if pos.shape[0] < 3 or not np.isfinite(pos[2]) or self.elev_g is None:
             return 0
@@ -335,6 +452,12 @@ class TomogramPlanner(object):
         return layer
 
     def nearest_layer_at_idx(self, idx, z):
+        """
+        在局部 XY 邻域中找到和 z 最相近的高度层。
+
+        这一步非常重要，因为 tomogram 是按层存储的，
+        而用户点击的点是 3D 坐标，所以需要决定该点属于哪一层。
+        """
         search_radius = 2
         x0 = max(0, idx[0] - search_radius)
         x1 = min(self.map_dim[0], idx[0] + search_radius + 1)
@@ -352,5 +475,12 @@ class TomogramPlanner(object):
         return layer
 
     def z2slice_layer(self, z):
+        """
+        把真实高度 z 转换成 tomogram 采样层索引。
+
+        这是高度到切片层之间的换算，主要用于：
+        - 目标点超出边界时的回退
+        - 层索引的快速估计
+        """
         layer = int(np.round((z - self.slice_h0) / self.slice_dh))
         return int(np.clip(layer, 0, self.n_slice - 1))

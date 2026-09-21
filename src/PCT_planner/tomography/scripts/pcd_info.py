@@ -23,6 +23,11 @@ _NP_TYPE = {
 
 
 def _lzf_decompress(src, out_len):
+    """
+    LZF 压缩数据解码，用于 binary_compressed PCD。
+
+    该函数会恢复压缩字节流，便于提取 x / y / z 等字段信息。
+    """
     out = bytearray()
     i = 0
     n = len(src)
@@ -43,6 +48,16 @@ def _lzf_decompress(src, out_len):
 
 
 def read_pcd(path):
+    """
+    读取 PCD 文件并返回：
+    - xyz
+    - 无效点数量
+    - 数据格式
+    - 字段名字
+
+    这是一个诊断工具脚本，主要用于查看地图大小、范围和 PCD 格式，
+    方便决定是否需要 voxel downsample 或调整 tomogram 参数。
+    """
     with open(path, 'rb') as f:
         header = b''
         while True:
@@ -132,6 +147,11 @@ def read_pcd(path):
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    """
+    输出 PCD 的 XYZ 范围、中心点、三维尺寸，辅助配置 tomogram。
+
+    它不是生成地图的脚本，而是一个“测量地图体积和参数建议”的工具。
+    """
     ap = argparse.ArgumentParser(description='Print XYZ range of a PCD file.')
     ap.add_argument('pcd', help='path to .pcd file')
     ap.add_argument('--voxel', type=float, default=0.0,

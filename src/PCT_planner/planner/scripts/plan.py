@@ -1,3 +1,17 @@
+"""
+PCT planner 入口脚本。
+
+该脚本用于在 ROS 1 环境中执行一个固定场景的 tomogram 路径规划。
+它会：
+1. 读取场景配置；
+2. 载入对应 tomogram 文件；
+3. 调用 TomogramPlanner 生成 3D 路径；
+4. 把路径发布为 ROS Path 消息。
+
+这个脚本属于 demo / offline 测试入口，适合在不依赖 RViz 点击交互时
+直接验证规划器的可用性。
+"""
+
 import sys
 import argparse
 import numpy as np

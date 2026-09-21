@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-"""Interactive RViz2 runner for planning from two Publish Point clicks."""
+"""
+RViz2 交互式 PCT 路径规划脚本。
+
+功能说明：
+- 读取 tomogram 地图文件；
+- 监听 RViz 中用户点击的 Publish Point；
+- 以第一个点击为起点，第二个点击为终点；
+- 调用 TomogramPlanner 做 3D 路径规划；
+- 发布最终路径、A* 搜索路径和可视化 marker。
+
+这是 PCT 路径规划的交互式入口，适合在 RViz 中直接进行人工指定起点/终点。
+"""
 import argparse
 import ctypes
 import os
@@ -39,6 +50,15 @@ from planner_wrapper import TomogramPlanner
 
 
 def resolve_tomo_path(tomo_arg):
+    """
+    将用户输入的 tomogram 名称解析成实际文件路径。
+
+    支持两种输入：
+    - 直接给出 .pickle 文件路径
+    - 只给出 tomogram 名称（例如 global_ground_map_floor2）
+
+    最终会解析成 rsc/tomogram 目录下的实际文件。
+    """
     if tomo_arg.endswith('.pickle') or os.path.sep in tomo_arg:
         path = os.path.abspath(tomo_arg)
     else:
@@ -50,6 +70,15 @@ def resolve_tomo_path(tomo_arg):
 
 
 def make_pointcloud2(node, points, has_intensity=False, frame_id='map'):
+    """
+    将离散的 tomogram 点云数据封装成 ROS PointCloud2 消息。
+
+    这个函数主要用于可视化地形：
+    - 每个点包含 x, y, z
+    - 可选附加 intensity，用于显示 traversability/cost
+
+    这样 RViz 界面可以直接显示 tomogram 的体素分布。
+    """
     msg = PointCloud2()
     msg.header.stamp = node.get_clock().now().to_msg()
     msg.header.frame_id = frame_id
@@ -76,6 +105,11 @@ def make_pointcloud2(node, points, has_intensity=False, frame_id='map'):
 
 
 def traj_to_path(node, traj, frame_id='map'):
+    """
+    把 NumPy 轨迹数组转换成 ROS nav_msgs/Path。
+
+    一条 3D 轨迹会被转成一系列 PoseStamped，便于在 RViz 中绘制路径线。
+    """
     msg = Path()
     msg.header.stamp = node.get_clock().now().to_msg()
     msg.header.frame_id = frame_id
@@ -91,6 +125,9 @@ def traj_to_path(node, traj, frame_id='map'):
 
 
 def sphere_marker(node, marker_id, xyz, rgba, frame_id='map'):
+    """
+    创建一个球形 marker，用于显示起点/终点点击位置。
+    """
     marker = Marker()
     marker.header.stamp = node.get_clock().now().to_msg()
     marker.header.frame_id = frame_id
@@ -118,6 +155,13 @@ def path_marker(
     rgba=None,
     width=0.12,
 ):
+    """
+    生成一条可视化路径 marker，用于按序连接 trajectory 中的点。
+
+    这用于在 RViz 中高亮显示：
+    - 最终优化后的完整路径
+    - A* 原始搜索路径
+    """
     if rgba is None:
         rgba = ColorRGBA(r=0.0, g=1.0, b=0.25, a=1.0)
     marker = Marker()
@@ -146,6 +190,17 @@ def delete_marker(node, ns, marker_id, frame_id='map'):
 
 
 class ClickPlannerNode(Node):
+    """
+    RViz 点击规划节点。
+
+    它是用户交互的核心入口，负责：
+    - 加载 tomogram 地图；
+    - 接收 /clicked_point 事件；
+    - 收集起点和终点；
+    - 调用 planner.plan 执行规划；
+    - 把路径和 marker 发布到 ROS 话题。
+    """
+
     def __init__(self, tomo_path, frame_id='map', publish_period=1.0):
         super().__init__('pct_click_planner')
         self.frame_id = frame_id
@@ -178,6 +233,14 @@ class ClickPlannerNode(Node):
         )
 
     def load_tomo_data(self, tomo_path):
+        """
+        读取 tomogram 二进制文件，并把数据转换为 NumPy 数组。
+
+        这里读取的内容主要用于：
+        - 地形高度场
+        - traversability cost
+        - resolution / center 等地图参数
+        """
         with open(tomo_path, 'rb') as handle:
             data = pickle.load(handle)
         data['data'] = np.asarray(data['data'], dtype=np.float32)
@@ -186,6 +249,15 @@ class ClickPlannerNode(Node):
         return data
 
     def build_tomo_cloud(self):
+        """
+        构造用于可视化的 tomogram 点云。
+
+        逻辑：
+        - 遍历每一层高度图；
+        - 过滤无效高度点；
+        - 把每个有效点转换成地图坐标；
+        - 打包成 PointCloud2，用于展示 3D elevation map。
+        """
         tomogram = self.tomo_data['data']
         traversability = tomogram[0].copy()
         elevation = tomogram[3].copy()
@@ -228,12 +300,24 @@ class ClickPlannerNode(Node):
         return make_pointcloud2(self, points, has_intensity=True, frame_id=self.frame_id)
 
     def publish_tomo(self, log=False):
+        """
+        周期性发布 tomogram 点云，供 RViz 可视化。 
+        """
         self.tomo_msg.header.stamp = self.get_clock().now().to_msg()
         self.tomo_pub.publish(self.tomo_msg)
         if log:
             self.get_logger().info('Published /tomogram')
 
     def on_clicked_point(self, msg):
+        """
+        RViz 点击回调函数。
+
+        用户在 RViz 中点击 Publish Point 时会进入这里。
+        - 第一次点击：作为 start
+        - 第二次点击：作为 goal
+
+        点击后会在 RViz 中显示一个绿色或红色小球，并执行规划。
+        """
         xyz = np.array([msg.point.x, msg.point.y, msg.point.z], dtype=np.float32)
 
         if len(self.clicks) == 0:
@@ -263,6 +347,16 @@ class ClickPlannerNode(Node):
         self.clicks.clear()
 
     def plan_from_clicks(self):
+        """
+        根据两次点击生成路径。
+
+        处理步骤：
+        1. 从起点和终点提取世界坐标；
+        2. 使用 infer_goal_height 修正终点高度；
+        3. 计算各自对应的 slice layer；
+        4. 调用 planner.plan 生成优化后的轨迹；
+        5. 发布 A* 路径 + 最终路径 + result.npy 文件。
+        """
         start_xyz = np.array(self.clicks[0], dtype=np.float32, copy=True)
         goal_xyz = self.infer_goal_height(self.clicks[1])
 
@@ -312,6 +406,13 @@ class ClickPlannerNode(Node):
         )
 
     def infer_goal_height(self, xyz):
+        """
+        从 tomogram 中推断终点缺失的 z 高度。
+
+        许多时候 RViz 点击点只给出 XY，或 z 接近 0 ，
+        这时需要根据本地地形高度场估计更合理的 z，以便规划器
+        选择正确的 slice 和高度。
+        """
         effective_xyz = np.array(xyz, dtype=np.float32, copy=True)
         if abs(float(effective_xyz[2])) >= self.click_z_epsilon:
             return effective_xyz
@@ -332,6 +433,11 @@ class ClickPlannerNode(Node):
         return effective_xyz
 
     def infer_goal_z_from_tomogram(self, x, y, reference_z):
+        """
+        根据 XY 周围的高程图，寻找最接近参考 z 的高程值。
+
+        这个函数用于补全“点击高度为 0 或极小值”的目标点的 z。
+        """
         if self.planner.elev_g is None:
             return None
 
@@ -373,11 +479,22 @@ class ClickPlannerNode(Node):
         return float(z[finite].max() - z[finite].min())
 
     def get_astar_path(self):
+        """
+        返回最近一次 A* 搜索得到的粗略路径。
+
+        这个路径通常不是最终优化轨迹，但对调试和可视化很有帮助。
+        """
         if hasattr(self.planner, 'getLastAstarPath'):
             return self.planner.getLastAstarPath()
         return getattr(self.planner, 'last_astar_traj', None)
 
     def find_slice(self, xyz):
+        """
+        根据 3D 点确定对应的 tomogram slice 层。
+
+        这是从实际世界坐标回到体数据层索引的关键步骤，
+        为底层 planner 提供 start_layer / goal_layer。
+        """
         elevation = self.tomo_data['data'][3]
         resolution = self.tomo_data['resolution']
         center = self.tomo_data['center']
@@ -406,11 +523,17 @@ class ClickPlannerNode(Node):
         return int(np.unravel_index(np.argmin(scores), scores.shape)[0])
 
     def z_to_slice_layer(self, z):
+        """
+        把真实高度 z 直接映射回 tomogram 的 slice 层编号。
+        """
         layer = int(round((z - float(self.tomo_data['slice_h0'])) / float(self.tomo_data['slice_dh'])))
         return int(np.clip(layer, 0, self.tomo_data['data'][3].shape[0] - 1))
 
 
 def launch_rviz(rviz_config):
+    """
+    启动 RViz2，并加载指定配置文件。
+    """
     try:
         return subprocess.Popen(['rviz2', '-d', rviz_config])
     except FileNotFoundError:
@@ -419,6 +542,16 @@ def launch_rviz(rviz_config):
 
 
 def main():
+    """
+    程序主入口。
+
+    负责：
+    - 解析命令行参数；
+    - 解析 tomogram 路径；
+    - 初始化 ROS 节点；
+    - 启动 RViz；
+    - 进入事件循环等待用户点击。
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--tomo',

@@ -39,7 +39,7 @@ double DenseElevationMap::GetRealCost(int layer, double x, double y,
     if (grad != nullptr) {
       *grad = Eigen::Vector2d(grad_x_(row, col), grad_y_(row, col));
     }
-    return planning_cost_(row, col);
+    return cost_(row, col);
   }
 
   double ele_value = ele_mask_(row, col);
@@ -80,13 +80,13 @@ double DenseElevationMap::GetRealCost(int layer, double x, double y,
     *new_layer = real_layer;
   }
 
-  return planning_cost_(real_row, col);
+  return cost_(real_row, col);
 }
 
 double DenseElevationMap::GetRealCostSafe(int layer, double x, double y,
                                           const double height_hint) {
   int real_layer = UpdateLayerSafe(layer, x, y, height_hint);
-  return planning_cost_(index_y_safe(y) + real_layer * max_y_,
+  return cost_(index_y_safe(y) + real_layer * max_y_,
                         index_x_safe(x));
 }
 

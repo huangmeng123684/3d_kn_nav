@@ -42,6 +42,12 @@ if not hasattr(np, 'bool'):
 # =========================== PCD 解析器 (纯 numpy) ===========================
 
 def _lzf_decompress(data, out_len):
+    """
+    PCD 的 binary_compressed 格式使用 LZF 压缩。
+
+    这个函数负责把压缩数据解压回原始字节流，
+    这样脚本就能直接读取常见的 PCL/ROS 点云文件，不依赖 Open3D/PCL.
+    """
     out = bytearray(); i, n = 0, len(data)
     while i < n:
         ctrl = data[i]; i += 1
@@ -65,6 +71,17 @@ _TYPE = {('F', 4): 'f4', ('F', 8): 'f8',
 
 
 def read_pcd_xyz(path):
+    """
+    读取 .pcd 文件并返回 Nx3 点云数组 [x, y, z]。
+
+    该函数支持：
+      - ascii
+      - binary
+      - binary_compressed
+
+    对 FAST-LIO/SAM 输出的地图非常实用，因为它经常会产生压缩 PCD 文件，
+    而直接依赖 ROS/PCL 可能不方便，所以这里用纯 numpy 自己解析。
+    """
     with open(path, 'rb') as f:
         raw = f.read()
     header = {}; idx = 0
@@ -117,10 +134,20 @@ def read_pcd_xyz(path):
 # =========================== 用 RANSAC 把点云放平 ===========================
 
 def fit_ground_normal(P, n_iter=300, thresh=0.05, vertical_cos=0.5, seed=0):
-    """RANSAC 拟合主"近水平"平面, 返回 (朝上的单位法向量, 内点的中位 Z 高度)。
+    """
+    用 RANSAC 拟合近水平的地面平面，并返回：
+      - ground normal（地面法向量）
+      - ground_z（地面高度）
+
+    作用：
+    由于 FAST-LIO 世界坐标系可能存在姿态倾斜，导致地图在 z 方向上“斜着”或
+    “被揉在一起”，所以先把地面水平化，再做 2D 占据地图投影。
+
+    这里采用“平面拟合 + 取内点 z 的中位数”来估计 ground height，
+    比单纯使用全局 z percentile 更稳，因为能排除高层建筑/天花板等干扰。
 
     返回的 ground_z 是 RANSAC 内点的 z 中位数——用地面点本身来算高度,
-    比全局百分位更准, 不受天花板、高楼等远处高点干扰。
+    比全局百分位更准，不受天花板、高楼等远处高点干扰。
     """
     rng = np.random.default_rng(seed); N = len(P)
     Q = P[rng.choice(N, min(N, 20000), replace=False)]
@@ -146,7 +173,13 @@ def fit_ground_normal(P, n_iter=300, thresh=0.05, vertical_cos=0.5, seed=0):
 
 
 def rotation_to_z(n):
-    """求把向量 n 旋到 +z 的旋转矩阵(罗德里格斯公式)。"""
+    """
+    创建一个旋转矩阵，把任意法向量 n 转到 +z 方向。
+
+    这一步用在“地面矫正”中：
+    先检测地面法向量，再把点云旋转到水平面，
+    这样后续的高度分布和投影地图会稳定很多。
+    """
     z = np.array([0., 0., 1.]); v = np.cross(n, z); s = np.linalg.norm(v); c = n.dot(z)
     if s < 1e-8:
         return np.eye(3)
@@ -157,6 +190,17 @@ def rotation_to_z(n):
 # =============================== 投影主流程 ===============================
 
 def parse_args():
+    """
+    命令行参数解析。
+
+    这些参数控制：
+      - 栅格分辨率
+      - 障碍高度区间
+      - 地面容忍阈值
+      - 占据点阈值
+      - 连通域过滤
+      - 是否自动地面放平 / 填洞处理
+    """
     p = argparse.ArgumentParser(description="3D .pcd -> 2D occupancy grid (.pgm + .yaml)")
     p.add_argument("pcd")
     p.add_argument("-o", "--out", default="map")
@@ -175,7 +219,12 @@ def parse_args():
     return p.parse_args()
 
 def normal_from_tilt(tilt_deg, azimuth_deg):
-    """tilt: 与竖直夹角; azimuth: 倾斜方向在 xy 平面上的角度"""
+    """
+    根据倾斜角和方位角构造一个“地面法向量”。
+
+    这个函数用于在手动指定倾斜时，生成一个与竖直方向有偏差的法向量，
+    便于点云倾斜修正时保持与 RANSAC 的倾斜方向一致。
+    """
     t = np.radians(tilt_deg)
     a = np.radians(azimuth_deg)
     return np.array([
@@ -186,6 +235,15 @@ def normal_from_tilt(tilt_deg, azimuth_deg):
 
 
 def main():
+    """
+    主流程：
+      1. 读取点云
+      2. 进行地面水平化（可选）
+      3. 计算相对地面高度，筛选障碍点
+      4. 把 3D 点转成二维栅格
+      5. 过滤孤立噪声块
+      6. 导出 .pgm/.yaml 路径地图
+    """
     args = parse_args()
 
     pts = read_pcd_xyz(args.pcd)
@@ -194,6 +252,9 @@ def main():
     print(f"读入 {len(pts)} 点  z原始范围:[{pts[:,2].min():.2f},{pts[:,2].max():.2f}]")
 
     # --- 放平: 把地面转到水平 ---
+    # 这是整个脚本最关键的步骤之一。
+    # 若点云本身因为传感器姿态偏移而“斜着”，那么直接投影到 XY 平面会造成地图严重畸变。
+    # 因此先通过 RANSAC 拟合地面法向量，并把点云旋转到水平状态。
     if not args.no_level:
         n_auto, ground_z_ransac = fit_ground_normal(pts, thresh=args.level_thresh)
         if args.manual_tilt is not None:
@@ -210,6 +271,7 @@ def main():
 
     x, y, z = pts[:, 0], pts[:, 1], pts[:, 2]
     # --ground-percentile 参数已废弃: 地面高度改用 RANSAC 内点的中位 Z,
+    # 不再依赖全局 z 百分位，以避免高层建筑或天花板干扰导致地面高度错误。
     # 不再依赖全局百分位(受天花板/高楼干扰)。参数保留兼容已有脚本, 不参与计算。
     ground_z = ground_z_ransac if not args.no_level else np.percentile(z, args.ground_percentile)
     z_rel = z - ground_z
@@ -224,6 +286,8 @@ def main():
     print(f"ground_z = {ground_z:.3f}  (percentile={args.ground_percentile})")
 
 
+    # --- 2D 栅格投影 ---
+    # 把 3D 点投影到二维地图上，用网格计数方式估计每个格子中有多少障碍点。
     res, pad = args.resolution, args.padding
     x_min, y_min = x.min() - pad, y.min() - pad
     w = int(np.ceil((x.max() + pad - x_min) / res))
@@ -231,12 +295,20 @@ def main():
     print(f"地图尺寸 {w} x {h} 格")
 
     def to_cell(px, py):
+        """
+        把世界坐标转换到地图栅格 index。
+        其中：
+        - col 对应 x 方向
+        - row 对应 y 方向
+        """
         col = np.clip(((px - x_min) / res).astype(np.int32), 0, w - 1)
         row = np.clip(((py - y_min) / res).astype(np.int32), 0, h - 1)
         return col, row
 
     obs_count = np.zeros((h, w), dtype=np.int32)
     free_seen = np.zeros((h, w), dtype=bool)
+    # 统计每个栅格里有多少个障碍点；
+    # 同时保存地面点出现的位置，便于后续将“地面”视为可通行区域。
     oc, orow = to_cell(x[obstacle_mask], y[obstacle_mask]); np.add.at(obs_count, (orow, oc), 1)
     gc, grow = to_cell(x[ground_mask], y[ground_mask]); free_seen[grow, gc] = True
 
@@ -254,6 +326,7 @@ def main():
     occupied = obs_count >= args.min_points
 
     # 连通域过滤: 剔除孤立小面积的占据块(人影、噪点等)
+    # 这是对点云投影后产生的碎片噪声进行去噪的关键步骤。
     # 在 2D 栅格上做 label + 面积阈值, 不影响墙体等大面积连续障碍
     if args.min_obstacle_area > 0:
         try:
@@ -271,6 +344,7 @@ def main():
             print("未安装 scipy, 跳过 --min-obstacle-area")
     free = free_seen & ~occupied
 
+    # 可选：填补空闲区域的局部小洞，减少由于采样不完整带来的空洞。
     if args.fill_free:
         try:
             from scipy import ndimage
@@ -299,6 +373,10 @@ def main():
 # ==============================================================================
 
 
+    # PGM 采用标准的 ROS occupancy image 表示：
+    # - 0: occupied
+    # - 254: free
+    # - 205: unknown (这里我们保留 205 作为未知值，但本脚本中通常填充为 254)
     grid = np.full((h, w), 254, dtype=np.uint8)
     grid[free] = 254
     grid[occupied] = 0
