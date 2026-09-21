@@ -55,7 +55,6 @@ void Astar::Init(const double cost_threshold, const int num_layers,
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::high_resolution_clock::now() - t0);
 
-  search_layer_depth_ = num_layers;
   search_layers_offset_.clear();
   search_layers_offset_.emplace_back(0);
   for (int i = 0; i < search_layer_depth_; ++i) {
@@ -95,7 +94,7 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
   auto goal_node = &grid_map_[goal[0]][goal[2]][goal[1]];
   start_node->g = 0.0;
 
-  if (goal_node->cost > cost_threshold_) {
+  if (goal_node->cost > cost_threshold_ || !std::isfinite(goal_node->cost)) {
     printf("goal node is not reachable, cost: %f", goal_node->cost);
     return false;
   }
@@ -152,6 +151,13 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
       }
 
       auto neighbor_node = &grid_map_[layer][i][j];
+
+      // Skip cells with invalid data (NaN/Inf) - higher layers may have gaps
+      if (!std::isfinite(neighbor_node->cost) || 
+          !std::isfinite(neighbor_node->height) || 
+          !std::isfinite(neighbor_node->ele)) {
+        continue;
+      }
 
       if (neighbor_node->cost > cost_threshold_) {
         if (abs(neighbor_node->ele) < 0.5) {
@@ -222,15 +228,20 @@ int Astar::DecideLayer(const Node* cur_node) const {
 
     const Node& search_node = grid_map_[cur_layer][i][j];
 
+    // Skip layers with invalid data
+    if (!std::isfinite(search_node.height) || !std::isfinite(search_node.ele)) {
+      continue;
+    }
+
     if (abs(search_node.height - cur_height) > 0.2) {
       continue;
     }
 
     if (search_node.ele > 0.5) {
-      true_layer = std::min(cur_layer + 1, max_layers_ - 1);
+      true_layer = std::min(layer + 1, max_layers_ - 1);
       break;
     } else if (search_node.ele < -0.5) {
-      true_layer = std::max(cur_layer - 1, 0);
+      true_layer = std::max(layer - 1, 0);
       break;
     }
   }
