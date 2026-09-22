@@ -337,6 +337,17 @@ class TomogramPlanner(object):
             h = self.nearest_elevation(layers[i], rows[i], cols[i])
             if h is not None:
                 sampled[i] = h
+
+        # z 连续性保护：只消除“非单调的单点尖峰”（先上去又下来），
+        # 不影响楼梯/跨楼层的单调升高，也不影响网关处的整层跳变。
+        if sampled.shape[0] >= 3:
+            for i in range(1, sampled.shape[0] - 1):
+                lo = min(sampled[i - 1], sampled[i + 1])
+                hi = max(sampled[i - 1], sampled[i + 1])
+                if sampled[i] > hi + 0.10:
+                    sampled[i] = hi
+                elif sampled[i] < lo - 0.10:
+                    sampled[i] = lo
         return sampled
 
     def nearest_elevation(self, layer, row, col, search_radius=2):
